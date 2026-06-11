@@ -52,10 +52,10 @@ frontend/.vite/
 Thumbs.db
 desktop.ini
 
-# Uploads
+# Uploads (only ignore files inside uploads folder)
 backend/uploads/
-*.pdf
-*.docx
+backend/uploads/*.pdf
+backend/uploads/*.docx
 
 # Logs
 *.log
