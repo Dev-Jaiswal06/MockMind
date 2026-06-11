@@ -143,7 +143,7 @@ text
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/mockmind.git
+git clone https://github.com/Dev-Jaiswal06/mockmind.git
 cd mockmind
 2. Backend Setup
 Bash
