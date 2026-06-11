@@ -1,0 +1,71 @@
+# ===========================
+# MockMind .gitignore
+# ===========================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Environment Variables (SENSITIVE!)
+.env
+.env.local
+.env.production
+backend/.env
+
+# Flask
+instance/
+.webassets-cache
+flask_session/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React Build
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Uploads
+backend/uploads/
+*.pdf
+*.docx
+
+# Logs
+*.log
+logs/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# JWT Keys
+*.pem
+*.key
