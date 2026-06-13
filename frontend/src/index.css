@@ -58,7 +58,30 @@ body{
   outline:none;transition:border .3s;font-family:'Inter',sans-serif;
 }
 .inp:focus{border-color:var(--p)}
+.inp.valid-input{border-color:var(--ok);box-shadow:0 0 0 1px rgba(16,185,129,.2)}
+.inp.invalid-input{border-color:var(--err);box-shadow:0 0 0 1px rgba(239,68,68,.2)}
+.validation-message{font-size:.82rem;margin-top:6px;line-height:1.4;}
+.validation-message.success{color:var(--ok)}
+.validation-message.error{color:var(--err)}
 .inp::placeholder{color:var(--t3)}
+.password-toggle{
+  position:absolute;
+  right:12px;
+  top:50%;
+  transform:translateY(-50%);
+  background:transparent;
+  border:none;
+  color:var(--t2);
+  cursor:pointer;
+  font-size:1rem;
+  padding:0;
+  width:32px;
+  height:32px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.password-toggle:hover{color:var(--t1)}
 
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-18px)}}
 @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(139,92,246,.3)}50%{box-shadow:0 0 50px rgba(139,92,246,.6)}}

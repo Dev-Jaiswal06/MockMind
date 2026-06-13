@@ -1,18 +1,28 @@
 import { useState }          from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { motion }            from "framer-motion"
+import { FiEye, FiEyeOff }   from "react-icons/fi"
 import { useAuth }           from "../context/AuthContext"
 import toast                 from "react-hot-toast"
 import RobotAnimation        from "../components/RobotAnimation"
 
 export default function Signup() {
   const [form,    setForm]    = useState({ name:"", email:"", password:"", confirm:"" })
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [passwordTouched, setPasswordTouched] = useState(false)
   const [loading, setLoading] = useState(false)
+  const isPasswordValid = form.password.length >= 8
   const { signup }            = useAuth()
   const navigate              = useNavigate()
 
   const onSubmit = async (e) => {
     e.preventDefault()
+    if (!isPasswordValid) {
+      setPasswordTouched(true)
+      toast.error("Password must be at least 8 characters.")
+      return
+    }
     if (form.password !== form.confirm) {
       toast.error("Passwords do not match!")
       return
@@ -32,7 +42,7 @@ export default function Signup() {
   const fields = [
     { key:"name",    label:"Full Name",        type:"text",     ph:"Enter your full name" },
     { key:"email",   label:"Email Address",    type:"email",    ph:"your@email.com" },
-    { key:"password",label:"Password",         type:"password", ph:"Minimum 6 characters" },
+    { key:"password",label:"Password",         type:"password", ph:"Minimum 8 characters" },
     { key:"confirm", label:"Confirm Password", type:"password", ph:"Re-enter your password" },
   ]
 
@@ -85,14 +95,45 @@ export default function Signup() {
               }}>
                 {f.label}
               </label>
-              <input
-                className="inp"
-                type={f.type}
-                placeholder={f.ph}
-                value={form[f.key]}
-                onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                required
-              />
+              <div style={f.key === "password" || f.key === "confirm" ? { position: "relative" } : {}}>
+                <input
+                  className={`inp ${f.key === "password" && passwordTouched ? (isPasswordValid ? "valid-input" : "invalid-input") : ""}`}
+                  type={
+                    f.key === "password"
+                      ? (showPassword ? "text" : "password")
+                      : f.key === "confirm"
+                        ? (showConfirm ? "text" : "password")
+                        : f.type
+                  }
+                  placeholder={f.ph}
+                  value={form[f.key]}
+                  onChange={e => {
+                    setForm({ ...form, [f.key]: e.target.value })
+                    if (f.key === "password") setPasswordTouched(true)
+                  }}
+                  required
+                  style={f.key === "password" || f.key === "confirm" ? { paddingRight: "48px" } : {}}
+                />
+                {(f.key === "password" || f.key === "confirm") && (
+                  <button
+                    type="button"
+                    onClick={() => f.key === "password" ? setShowPassword(prev => !prev) : setShowConfirm(prev => !prev)}
+                    className="password-toggle"
+                    aria-label={f.key === "password" ? (showPassword ? "Hide password" : "Show password") : (showConfirm ? "Hide password" : "Show password")}
+                  >
+                    {f.key === "password"
+                      ? (showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />)
+                      : (showConfirm ? <FiEyeOff size={18} /> : <FiEye size={18} />)}
+                  </button>
+                )}
+              </div>
+              {f.key === "password" && passwordTouched && (
+                <div className={`validation-message ${isPasswordValid ? "success" : "error"}`}>
+                  {isPasswordValid
+                    ? "Password strength: Valid"
+                    : "Password must be at least 8 characters."}
+                </div>
+              )}
             </div>
           ))}
 

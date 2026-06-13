@@ -96,21 +96,6 @@ export default function Dashboard() {
             Ready for your next practice session?
           </p>
         </div>
-        <button
-          onClick={logout}
-          style={{
-            background:   "rgba(239,68,68,.1)",
-            border:       "1px solid rgba(239,68,68,.3)",
-            color:        "#ef4444",
-            padding:      "9px 18px",
-            borderRadius: "10px",
-            cursor:       "pointer",
-            fontWeight:   600,
-            fontSize:     ".88rem"
-          }}
-        >
-          Sign Out
-        </button>
       </motion.div>
 
       {/* Stat Cards */}
@@ -140,15 +125,24 @@ export default function Dashboard() {
       {/* Module Cards */}
       <div style={{
         display:               "grid",
-        gridTemplateColumns:   "repeat(auto-fill, minmax(300px, 1fr))",
+        gridTemplateColumns:   "repeat(auto-fit, minmax(280px, 1fr))",
         gap:                   "20px",
+        alignItems:            "stretch",
         marginBottom:          "28px"
       }}>
         {modules.map((m, i) => (
           <motion.div
             key={i}
             className="glass"
-            style={{ padding:"28px", background:m.bg, border:`1px solid ${m.bdr}` }}
+            style={{
+              display:       "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              minHeight:     "260px",
+              padding:       "28px",
+              background:    m.bg,
+              border:        `1px solid ${m.bdr}`
+            }}
             initial={{ opacity:0, y:20 }}
             animate={{ opacity:1, y:0 }}
             transition={{ delay: .1 + i * .1 }}
