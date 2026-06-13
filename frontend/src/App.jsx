@@ -1,4 +1,4 @@
-// src/App.jsx — Sidebar wala layout add karo
+// src/App.jsx — Sidebar + Navbar + Full Interview Features
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { Toaster }        from "react-hot-toast"
 import { AuthProvider }   from "./context/AuthContext"
@@ -30,7 +30,7 @@ export default function App() {
           <Route path="/login"  element={<Login/>}/>
           <Route path="/signup" element={<Signup/>}/>
 
-          {/* Protected pages — WITH sidebar */}
+          {/* Protected pages — WITH sidebar & navbar */}
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <AppLayout><Dashboard/></AppLayout>
