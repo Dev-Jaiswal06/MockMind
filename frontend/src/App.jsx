@@ -7,6 +7,7 @@ import Login              from "./pages/Login"
 import Signup             from "./pages/Signup"
 import Dashboard          from "./pages/Dashboard"
 import { Suspense } from "react"
+import Interview           from "./pages/Interview"
 
 const Spin = ()=>(
   <div style={{display:"flex",justifyContent:"center",
@@ -45,7 +46,7 @@ export default function App() {
             }/>
             <Route path="/interview" element={
               <ProtectedRoute>
-                <Coming name="Interview Module"/>
+                <Interview />
               </ProtectedRoute>
             }/>
             <Route path="/coding" element={
