@@ -38,4 +38,4 @@ with app.app_context():
 if __name__ == "__main__":
     print("\n🧠 MockMind Backend Starting...")
     print("📍 http://localhost:5000\n")
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, use_reloader=False)

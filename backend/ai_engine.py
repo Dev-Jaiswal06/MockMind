@@ -9,7 +9,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 PRIMARY  = "gemini-2.0-flash"
-FALLBACK = "gemini-1.5-flash-8b"
+FALLBACK = "gemini-1.5-flash"
 
 
 def _gemini(prompt, temp=0.7, fallback=False):
