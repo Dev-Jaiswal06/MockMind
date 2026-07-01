@@ -1,13 +1,50 @@
 # backend/models.py
 from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo.errors import ConfigurationError, ServerSelectionTimeoutError
 from dotenv import load_dotenv
 from datetime import datetime
 import os
 
 load_dotenv()
 
+
+def _build_client():
+    """Create a Mongo client with sane timeouts and optional DNS fallback."""
+    primary_uri = os.getenv("MONGODB_URI", "").strip()
+    fallback_uri = os.getenv("MONGODB_URI_FALLBACK", "").strip()
+
+    if not primary_uri:
+        raise RuntimeError("MONGODB_URI is missing in backend/.env")
+
+    options = {
+        "serverSelectionTimeoutMS": int(os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "8000")),
+        "connectTimeoutMS": int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "8000")),
+        "socketTimeoutMS": int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "8000")),
+    }
+
+    try:
+        client = MongoClient(primary_uri, **options)
+        client.admin.command("ping")
+        return client
+    except ConfigurationError as exc:
+        error_text = str(exc).lower()
+        dns_timeout = "resolution lifetime expired" in error_text or "dns operation timed out" in error_text
+        if dns_timeout and fallback_uri:
+            client = MongoClient(fallback_uri, **options)
+            client.admin.command("ping")
+            return client
+        raise RuntimeError(
+            "MongoDB DNS resolution failed. Either fix local DNS or set MONGODB_URI_FALLBACK "
+            "with Atlas non-SRV URI (mongodb://...)."
+        ) from exc
+    except ServerSelectionTimeoutError as exc:
+        raise RuntimeError(
+            "MongoDB server selection timed out. Check URI, IP allowlist, and network access."
+        ) from exc
+
+
 # ── Connect to MongoDB ──
-_client = MongoClient(os.getenv("MONGODB_URI"))
+_client = _build_client()
 db      = _client["mockmind"]
 
 # ── Collections ──

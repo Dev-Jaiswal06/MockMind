@@ -1,18 +1,27 @@
 import { useState }          from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { motion }            from "framer-motion"
+import { FiEye, FiEyeOff }   from "react-icons/fi"
 import { useAuth }           from "../context/AuthContext"
 import toast                 from "react-hot-toast"
 import RobotAnimation        from "../components/RobotAnimation"
 
 export default function Login() {
   const [form,    setForm]    = useState({ email: "", password: "" })
+  const [showPassword, setShowPassword] = useState(false)
+  const [passwordTouched, setPasswordTouched] = useState(false)
   const [loading, setLoading] = useState(false)
+  const isPasswordValid = form.password.length >= 8
   const { login }             = useAuth()
   const navigate              = useNavigate()
 
   const onSubmit = async (e) => {
     e.preventDefault()
+    if (!isPasswordValid) {
+      setPasswordTouched(true)
+      toast.error("Password must be at least 8 characters.")
+      return
+    }
     setLoading(true)
     try {
       await login(form.email, form.password)
@@ -80,21 +89,37 @@ export default function Login() {
               }}>
                 {f.label}
               </label>
-              <input
-                className="inp"
-                type={f.type}
-                placeholder={f.ph}
-                value={form[f.key]}
-                onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                required
-              />
+              <div style={f.key === "password" ? { position: "relative" } : {}}>
+                <input
+                  className={`inp ${f.key === "password" && passwordTouched ? (isPasswordValid ? "valid-input" : "invalid-input") : ""}`}
+                  type={f.key === "password" ? (showPassword ? "text" : "password") : f.type}
+                  placeholder={f.ph}
+                  value={form[f.key]}
+                  onChange={e => {
+                    setForm({ ...form, [f.key]: e.target.value })
+                    if (f.key === "password") setPasswordTouched(true)
+                  }}
+                  required
+                  style={f.key === "password" ? { paddingRight: "48px" } : {}}
+                />
+                {f.key === "password" && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(prev => !prev)}
+                    className="password-toggle"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
 
           <motion.button
             type="submit"
             className="btn btnp"
-            disabled={loading}
+            disabled={loading || !isPasswordValid}
             style={{ marginTop: "6px", padding: "14px", fontSize: "1rem" }}
             whileHover={!loading ? { scale: 1.02 } : {}}
           >
