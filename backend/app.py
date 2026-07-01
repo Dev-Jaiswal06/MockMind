@@ -17,10 +17,12 @@ app = Flask(__name__)
 app.config["JWT_SECRET_KEY"]           = os.getenv("JWT_SECRET_KEY","dev")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = 86400
 
-CORS(app, origins=[
-    "http://localhost:5173",
-    "http://localhost:3000"
-])
+
+CORS(app,origins=[
+        "http://localhost:5173",
+        "http://localhost:3000"
+    ]
+)
 jwt = JWTManager(app)
 
 app.register_blueprint(auth_bp)
@@ -38,4 +40,8 @@ with app.app_context():
 if __name__ == "__main__":
     print("\n🧠 MockMind Backend Starting...")
     print("📍 http://localhost:5000\n")
-    app.run(debug=True, port=5000, use_reloader=False)
+    app.run(
+    port=5000,
+    debug=True,
+    use_reloader=False
+    )

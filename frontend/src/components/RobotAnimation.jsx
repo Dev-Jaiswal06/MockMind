@@ -39,10 +39,22 @@ export default function RobotAnimation({ size = 300 }) {
             <circle cx={e.cx} cy={e.cy} r="2.5" fill="white"/>
           </g>
         ))}
-        <motion.path d="M83 82 Q100 92 117 82" stroke="url(#rg)"
-          strokeWidth="2" fill="none" strokeLinecap="round"
-          animate={{d:["M83 82 Q100 92 117 82","M83 84 Q100 90 117 84","M83 82 Q100 92 117 82"]}}
-          transition={{duration:3,repeat:Infinity}}/>
+        <motion.path
+            d="M83 82 Q100 92 117 82"
+            stroke="url(#rg)"
+            strokeWidth="2"
+            fill="none"
+            strokeLinecap="round"
+            animate={{
+              y: [0, 2, 0],
+              scaleX: [1, 1.05, 1]
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+/>
         <rect x="88" y="100" width="24" height="14" rx="5"
           fill="rgba(255,255,255,.04)" stroke="url(#rg)" strokeWidth="1.5"/>
         <motion.rect x="42" y="114" width="116" height="78" rx="20"
