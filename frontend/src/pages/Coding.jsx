@@ -65,7 +65,7 @@ export default function Coding() {
       setLoading(false)
     }
   }
-
+  
   // ── When language changes update starter code ──
   const handleLanguageChange = (lang) => {
     setLanguage(lang)
