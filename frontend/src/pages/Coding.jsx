@@ -1,5 +1,5 @@
 // frontend/src/pages/Coding.jsx
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Editor                  from "@monaco-editor/react"
 import { motion }              from "framer-motion"
 import API                     from "../utils/api"
@@ -8,7 +8,7 @@ import toast                   from "react-hot-toast"
 // ── Languages supported ──
 const LANGUAGES = [
   { id: "python",     label: "Python",     icon: "🐍" },
-  { id: "javascript", label: "JavaScript", icon: "🟨" },
+
   { id: "java",       label: "Java",       icon: "☕" },
   { id: "cpp",        label: "C++",        icon: "⚡" },
   { id: "c",          label: "C",          icon: "🔵" },
@@ -39,9 +39,12 @@ export default function Coding() {
   const [running,    setRunning]    = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [activeTab,  setActiveTab]  = useState("problem")
+  const fetched = useRef(false)
 
   // ── Load problem on mount ──
   useEffect(() => {
+    if (fetched.current) return
+    fetched.current = true
     fetchProblem()
   }, [])
 

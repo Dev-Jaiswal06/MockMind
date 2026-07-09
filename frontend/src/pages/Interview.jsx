@@ -65,7 +65,7 @@ export default function Interview() {
   const [screen, setScreen] = useState(SCREEN.SETUP)
 
   // ── Setup state ──
-  const [selectedRole, setRole]   = useState(null)
+  const [selectedRole, setRole]   = useState(ROLES[0])
   const [selectedType, setType]   = useState("role")
   const [selectedRound, setRound] = useState("hr")
   const [resumeFile,   setResume] = useState(null)
@@ -378,7 +378,7 @@ export default function Interview() {
         </p>
       </motion.div>
 
-      {/* ── Step 1: Select Role ── */}
+      {/* ── Step 1: Interview Type ── */}
       <motion.div
         className="glass"
         style={{ padding: "24px", marginBottom: "20px" }}
@@ -387,58 +387,7 @@ export default function Interview() {
         transition={{ delay: .1 }}
       >
         <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
-          Step 1 — Select Job Role
-        </h3>
-        <div style={{
-          display:             "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-          gap:                 "10px"
-        }}>
-          {ROLES.map(role => (
-            <motion.div
-              key={role.id}
-              onClick={() => setRole(role)}
-              whileHover={{ y: -3 }}
-              whileTap={{ scale: .97 }}
-              style={{
-                padding:      "14px",
-                borderRadius: "12px",
-                border:       selectedRole?.id === role.id
-                                ? "2px solid #8b5cf6"
-                                : "1px solid rgba(255,255,255,.08)",
-                background:   selectedRole?.id === role.id
-                                ? "rgba(139,92,246,.15)"
-                                : "rgba(255,255,255,.03)",
-                cursor:       "pointer",
-                textAlign:    "center",
-                transition:   "all .2s"
-              }}
-            >
-              <div style={{ fontSize: "1.8rem", marginBottom: "6px" }}>
-                {role.icon}
-              </div>
-              <div style={{
-                fontSize:   ".82rem",
-                fontWeight: selectedRole?.id === role.id ? 700 : 500,
-                color:      selectedRole?.id === role.id ? "#a78bfa" : "var(--t1)"
-              }}>
-                {role.label}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* ── Step 2: Interview Type ── */}
-      <motion.div
-        className="glass"
-        style={{ padding: "24px", marginBottom: "20px" }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y:  0 }}
-        transition={{ delay: .2 }}
-      >
-        <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
-          Step 2 — Interview Type
+          Step 1 — Interview Type
         </h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
           {TYPES.map(type => (
@@ -474,48 +423,61 @@ export default function Interview() {
             </div>
           ))}
         </div>
-        {(selectedType === "role" || selectedType === "resume" || selectedType === "both") && (
-          <div style={{ marginTop: "20px" }}>
-            <h4 style={{ fontWeight: 700, marginBottom: "12px" }}>Choose Round</h4>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
-              {ROUNDS.map(round => (
-                <div
-                  key={round.id}
-                  onClick={() => setRound(round.id)}
-                  style={{
-                    padding:      "14px",
-                    borderRadius: "12px",
-                    border:       selectedRound === round.id
-                                    ? "2px solid #8b5cf6"
-                                    : "1px solid rgba(255,255,255,.08)",
-                    background:   selectedRound === round.id
-                                    ? "rgba(139,92,246,.15)"
-                                    : "rgba(255,255,255,.03)",
-                    cursor:       "pointer",
-                    textAlign:    "center",
-                    transition:   "all .2s"
-                  }}
-                >
-                  <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{round.icon}</div>
-                  <div style={{
-                    fontWeight: 700,
-                    fontSize:   ".88rem",
-                    marginBottom: "4px",
-                    color: selectedRound === round.id ? "#a78bfa" : "var(--t1)"
-                  }}>
-                    {round.label}
-                  </div>
-                  <div style={{ fontSize: ".76rem", color: "var(--t2)" }}>
-                    {round.desc}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </motion.div>
 
-      {/* ── Step 3: Resume Upload (conditional) ── */}
+      {/* ── Step 2: Select Role (for role-based / combined) ── */}
+      {(selectedType === "role" || selectedType === "both") && (
+        <motion.div
+          className="glass"
+          style={{ padding: "24px", marginBottom: "20px" }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y:  0 }}
+        >
+          <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
+            Step 2 — Select Job Role
+          </h3>
+          <div style={{
+            display:             "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+            gap:                 "10px"
+          }}>
+            {ROLES.map(role => (
+              <motion.div
+                key={role.id}
+                onClick={() => setRole(role)}
+                whileHover={{ y: -3 }}
+                whileTap={{ scale: .97 }}
+                style={{
+                  padding:      "14px",
+                  borderRadius: "12px",
+                  border:       selectedRole?.id === role.id
+                                  ? "2px solid #8b5cf6"
+                                  : "1px solid rgba(255,255,255,.08)",
+                  background:   selectedRole?.id === role.id
+                                  ? "rgba(139,92,246,.15)"
+                                  : "rgba(255,255,255,.03)",
+                  cursor:       "pointer",
+                  textAlign:    "center",
+                  transition:   "all .2s"
+                }}
+              >
+                <div style={{ fontSize: "1.8rem", marginBottom: "6px" }}>
+                  {role.icon}
+                </div>
+                <div style={{
+                  fontSize:   ".82rem",
+                  fontWeight: selectedRole?.id === role.id ? 700 : 500,
+                  color:      selectedRole?.id === role.id ? "#a78bfa" : "var(--t1)"
+                }}>
+                  {role.label}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Resume Upload (resume / combined only) ── */}
       {(selectedType === "resume" || selectedType === "both") && (
         <motion.div
           className="glass"
@@ -524,7 +486,7 @@ export default function Interview() {
           animate={{ opacity: 1, y:  0 }}
         >
           <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
-            Step 3 — Upload Resume
+            {selectedType === "both" ? "Step 3" : "Step 2"} — Upload Resume
           </h3>
           <p style={{ color: "var(--t2)", marginBottom: "16px", fontSize: ".86rem" }}>
             Resume upload is optional. If you don't have one, you can still start the interview and answer role-based questions.
@@ -573,16 +535,63 @@ export default function Interview() {
         </motion.div>
       )}
 
-      {/* ── Step 4: Number of Questions ── */}
+      {/* ── Choose Round ── */}
+      {(selectedType === "role" || selectedType === "resume" || selectedType === "both") && (
+        <motion.div
+          className="glass"
+          style={{ padding: "24px", marginBottom: "20px" }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y:  0 }}
+        >
+          <h3 style={{ fontWeight: 700, marginBottom: "12px" }}>
+            {selectedType === "both" ? "Step 4" : "Step 3"} — Choose Round
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
+            {ROUNDS.map(round => (
+              <div
+                key={round.id}
+                onClick={() => setRound(round.id)}
+                style={{
+                  padding:      "14px",
+                  borderRadius: "12px",
+                  border:       selectedRound === round.id
+                                  ? "2px solid #8b5cf6"
+                                  : "1px solid rgba(255,255,255,.08)",
+                  background:   selectedRound === round.id
+                                  ? "rgba(139,92,246,.15)"
+                                  : "rgba(255,255,255,.03)",
+                  cursor:       "pointer",
+                  textAlign:    "center",
+                  transition:   "all .2s"
+                }}
+              >
+                <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{round.icon}</div>
+                <div style={{
+                  fontWeight: 700,
+                  fontSize:   ".88rem",
+                  marginBottom: "4px",
+                  color: selectedRound === round.id ? "#a78bfa" : "var(--t1)"
+                }}>
+                  {round.label}
+                </div>
+                <div style={{ fontSize: ".76rem", color: "var(--t2)" }}>
+                  {round.desc}
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Number of Questions ── */}
       <motion.div
         className="glass"
         style={{ padding: "24px", marginBottom: "24px" }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y:  0 }}
-        transition={{ delay: .3 }}
       >
         <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
-          {selectedType === "resume" || selectedType === "both" ? "Step 4" : "Step 3"} — Number of Questions: <span className="gt">{numQuestions}</span>
+          {selectedType === "both" ? "Step 5" : "Step 4"} — Number of Questions: <span className="gt">{numQuestions}</span>
         </h3>
         <input
           type="range"
