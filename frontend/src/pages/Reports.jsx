@@ -1,5 +1,5 @@
 // frontend/src/pages/Reports.jsx
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Link }                from "react-router-dom"
 import { motion }              from "framer-motion"
 import API                     from "../utils/api"
@@ -16,6 +16,7 @@ export default function Reports() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
   const [activeTab, setActiveTab] = useState("overview")
+  const fetched = useRef(false)
 
   const loadData = useCallback(() => {
     setLoading(true)
@@ -29,8 +30,8 @@ export default function Reports() {
   }, [])
 
   useEffect(() => {
-    // This is the standard React pattern for fetching data in effects
-    // eslint-disable-next-line react-hooks
+    if (fetched.current) return
+    fetched.current = true
     loadData()
   }, [loadData])  
 

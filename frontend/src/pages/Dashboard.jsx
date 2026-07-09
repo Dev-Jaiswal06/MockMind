@@ -1,4 +1,4 @@
-import { useState, useEffect }  from "react"
+import { useState, useEffect, useRef }  from "react"
 import { Link }                  from "react-router-dom"
 import { motion }                from "framer-motion"
 import { useAuth }               from "../context/AuthContext"
@@ -12,8 +12,11 @@ export default function Dashboard() {
   const { user, logout } = useAuth()
   const [data, setData]  = useState(null)
   const [load, setLoad]  = useState(true)
+  const fetched = useRef(false)
 
   useEffect(() => {
+    if (fetched.current) return
+    fetched.current = true
     API.get("/api/reports/dashboard")
       .then(r => { setData(r.data); setLoad(false) })
       .catch(()  => setLoad(false))

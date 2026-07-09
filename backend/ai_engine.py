@@ -55,6 +55,51 @@ def _tfidf(t1, t2):
 # ══════════════════════════════════
 # 1. GENERATE QUESTIONS
 # ══════════════════════════════════
+def _FALLBACK_QUESTIONS(role):
+    tech = [
+        f"What is your experience with core {role} technologies and which do you enjoy most?",
+        f"Explain a challenging {role} project you worked on and how you solved technical problems.",
+        f"How do you stay updated with the latest trends in {role}?",
+        f"Describe your approach to debugging a complex issue in a {role} application.",
+        f"What testing strategies do you follow when building {role} applications?",
+        f"Explain the difference between REST and GraphQL from a {role} perspective.",
+        f"How do you handle state management in your {role} projects?",
+        f"What database design considerations are important in {role} development?",
+        f"Describe a time you optimized the performance of a {role} application.",
+        f"How do you ensure code quality and maintainability in your {role} projects?",
+        f"What version control strategies do you use in team-based {role} development?",
+        f"Explain how you would design a scalable {role} architecture from scratch.",
+        f"What security practices do you follow when building {role} applications?",
+        f"How do you handle error handling and logging in {role} applications?",
+        f"Describe your experience with CI/CD pipelines in {role} development.",
+        f"What is your approach to API design in {role} projects?",
+        f"How do you manage technical debt in long-running {role} projects?",
+        f"Explain the concept of microservices and when you'd use them in {role}.",
+        f"What tools and frameworks do you prefer for {role} development and why?",
+        f"How do you approach writing documentation for {role} projects?",
+    ]
+    behav = [
+        "Tell me about a time you had a conflict with a teammate and how you resolved it.",
+        "Describe a situation where you had to meet a tight deadline. How did you handle it?",
+        "Tell me about a project you are most proud of and your contribution to it.",
+        "How do you handle constructive criticism from peers or managers?",
+        "Describe a time you made a mistake in a project and how you fixed it.",
+        "Tell me about a time you went above and beyond what was expected of you.",
+        "How do you prioritize tasks when working on multiple projects?",
+        "Describe a situation where you had to learn a new technology quickly.",
+        "Tell me about a time you mentored or helped a teammate grow.",
+        "Where do you see yourself in your career five years from now?",
+        "Why are you interested in this role and what makes you a good fit?",
+        "Describe a time you had to make a decision with incomplete information.",
+        "How do you handle working under pressure or in high-stress situations?",
+        "Tell me about a time you received difficult feedback and how you responded.",
+        "What is your approach to collaborating with non-technical stakeholders?",
+    ]
+    pool = tech + behav
+    random.shuffle(pool)
+    return pool
+
+
 def generate_questions(role, resume_text=None, num_q=8, seed=None):
     seed = seed or random.randint(1000, 9999)
     diff = random.choice([
@@ -117,8 +162,21 @@ Return ONLY a valid JSON array with no extra text:
 
     result = _parse(_gemini(prompt, temp=0.9))
     if result and isinstance(result, list):
-        return result[:num_q]
-    return [f"Please describe your experience with {role} — Topic {i+1}" for i in range(num_q)]
+        seen = set()
+        unique = []
+        for q in result:
+            key = q.strip().lower() if isinstance(q, str) else str(q).strip().lower()
+            if key not in seen:
+                seen.add(key)
+                unique.append(q)
+        if len(unique) >= num_q:
+            return unique[:num_q]
+        pool = _FALLBACK_QUESTIONS(role)
+        random.shuffle(pool)
+        return (unique + pool)[:num_q]
+    pool = _FALLBACK_QUESTIONS(role)
+    random.shuffle(pool)
+    return pool[:num_q]
 
 
 # ══════════════════════════════════
@@ -179,6 +237,116 @@ Return ONLY valid JSON with no extra text:
 # ══════════════════════════════════
 # 3. CODING PROBLEM
 # ══════════════════════════════════
+def _FALLBACK_PROBLEMS(difficulty):
+    return [
+        {
+            "title": "Two Sum",
+            "description": "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target. You may assume that each input would have exactly one solution, and you may not use the same element twice.",
+            "examples": [{"input": "[2, 7, 11, 15], target = 9", "output": "[0, 1]", "explanation": "nums[0] + nums[1] = 2 + 7 = 9, so we return [0, 1]."}],
+            "constraints": ["2 <= nums.length <= 10^4", "-10^9 <= nums[i] <= 10^9", "Only one valid answer exists"],
+            "starter_code": {
+                "python": "def two_sum(nums, target):\n    # Write your code here\n    pass",
+                "javascript": "function twoSum(nums, target) {\n  // Write your code here\n}",
+                "java": "class Solution {\n  public int[] twoSum(int[] nums, int target) {\n    // Write your code here\n    return new int[]{};\n  }\n}",
+                "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nvector<int> twoSum(vector<int>& nums, int target) {\n  // Write your code here\n  return {};\n}",
+                "c": "#include<stdio.h>\nint* twoSum(int* nums, int n, int target) {\n  // Write your code here\n  return NULL;\n}"
+            },
+            "test_cases": [
+                {"input": "[2,7,11,15]\n9", "expected": "[0, 1]"},
+                {"input": "[3,2,4]\n6", "expected": "[1, 2]"},
+                {"input": "[3,3]\n6", "expected": "[0, 1]"}
+            ],
+            "hints": ["Consider using a HashMap to store elements you have already seen.", "For each element, check if its complement (target - element) exists in the map."],
+            "difficulty": difficulty,
+            "topic": "arrays"
+        },
+        {
+            "title": "Reverse a String",
+            "description": "Write a function that reverses a string. The input string is given as an array of characters s. Do not allocate extra space for another array; you must do this by modifying the input array in-place with O(1) extra memory.",
+            "examples": [{"input": "['h','e','l','l','o']", "output": "['o','l','l','e','h']", "explanation": "Reverse the character array in place."}],
+            "constraints": ["1 <= s.length <= 10^5", "s[i] is a printable ascii character"],
+            "starter_code": {
+                "python": "def reverse_string(s):\n    # Write your code here\n    pass",
+                "javascript": "function reverseString(s) {\n  // Write your code here\n}",
+                "java": "class Solution {\n  public void reverseString(char[] s) {\n    // Write your code here\n  }\n}",
+                "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nvoid reverseString(vector<char>& s) {\n  // Write your code here\n}",
+                "c": "#include<stdio.h>\nvoid reverseString(char* s, int n) {\n  // Write your code here\n}"
+            },
+            "test_cases": [
+                {"input": "['h','e','l','l','o']", "expected": "['o','l','l','e','h']"},
+                {"input": "['H','a','n','n','a','h']", "expected": "['h','a','n','n','a','H']"},
+                {"input": "['a']", "expected": "['a']"}
+            ],
+            "hints": ["Use two pointers — one at start, one at end.", "Swap characters and move pointers towards center."],
+            "difficulty": difficulty,
+            "topic": "strings"
+        },
+        {
+            "title": "Valid Parentheses",
+            "description": "Given a string s containing just the characters '(', ')', '{', '}', '[' and ']', determine if the input string is valid. A string is valid if open brackets are closed in the correct order and every close bracket has a corresponding open bracket of the same type.",
+            "examples": [{"input": "'()[]{}'", "output": "true", "explanation": "All brackets are properly closed in order."}],
+            "constraints": ["1 <= s.length <= 10^4", "s consists of parentheses only '()[]{}'"],
+            "starter_code": {
+                "python": "def is_valid(s):\n    # Write your code here\n    pass",
+                "javascript": "function isValid(s) {\n  // Write your code here\n}",
+                "java": "class Solution {\n  public boolean isValid(String s) {\n    // Write your code here\n    return false;\n  }\n}",
+                "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nbool isValid(string s) {\n  // Write your code here\n  return false;\n}",
+                "c": "#include<stdio.h>\n#include<stdbool.h>\nbool isValid(char* s) {\n  // Write your code here\n  return false;\n}"
+            },
+            "test_cases": [
+                {"input": "()", "expected": "true"},
+                {"input": "()[]{}", "expected": "true"},
+                {"input": "(]", "expected": "false"}
+            ],
+            "hints": ["Use a stack data structure.", "Push open brackets, pop when matching close bracket is found."],
+            "difficulty": difficulty,
+            "topic": "strings"
+        },
+        {
+            "title": "Palindrome Check",
+            "description": "Given a string s, determine if it is a palindrome, considering only alphanumeric characters and ignoring cases. A palindrome reads the same forwards and backwards.",
+            "examples": [{"input": "'A man, a plan, a canal: Panama'", "output": "true", "explanation": "After removing non-alphanumeric characters and ignoring case, it reads 'amanaplanacanalpanama' which is a palindrome."}],
+            "constraints": ["1 <= s.length <= 2 * 10^5", "s consists only of printable ASCII characters"],
+            "starter_code": {
+                "python": "def is_palindrome(s):\n    # Write your code here\n    pass",
+                "javascript": "function isPalindrome(s) {\n  // Write your code here\n}",
+                "java": "class Solution {\n  public boolean isPalindrome(String s) {\n    // Write your code here\n    return false;\n  }\n}",
+                "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nbool isPalindrome(string s) {\n  // Write your code here\n  return false;\n}",
+                "c": "#include<stdio.h>\n#include<stdbool.h>\nbool isPalindrome(char* s) {\n  // Write your code here\n  return false;\n}"
+            },
+            "test_cases": [
+                {"input": "'A man, a plan, a canal: Panama'", "expected": "true"},
+                {"input": "'race a car'", "expected": "false"},
+                {"input": "' '", "expected": "true"}
+            ],
+            "hints": ["Filter out non-alphanumeric characters first.", "Use two pointers from both ends and compare."],
+            "difficulty": difficulty,
+            "topic": "strings"
+        },
+        {
+            "title": "Find Maximum Subarray",
+            "description": "Given an integer array nums, find the contiguous subarray (containing at least one number) which has the largest sum and return its sum. This is Kadane's Algorithm.",
+            "examples": [{"input": "[-2,1,-3,4,-1,2,1,-5,4]", "output": "6", "explanation": "The subarray [4,-1,2,1] has the largest sum of 6."}],
+            "constraints": ["1 <= nums.length <= 10^5", "-10^4 <= nums[i] <= 10^4"],
+            "starter_code": {
+                "python": "def max_subarray(nums):\n    # Write your code here\n    pass",
+                "javascript": "function maxSubArray(nums) {\n  // Write your code here\n}",
+                "java": "class Solution {\n  public int maxSubArray(int[] nums) {\n    // Write your code here\n    return 0;\n  }\n}",
+                "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nint maxSubArray(vector<int>& nums) {\n  // Write your code here\n  return 0;\n}",
+                "c": "#include<stdio.h>\nint maxSubArray(int* nums, int n) {\n  // Write your code here\n  return 0;\n}"
+            },
+            "test_cases": [
+                {"input": "[-2,1,-3,4,-1,2,1,-5,4]", "expected": "6"},
+                {"input": "[1]", "expected": "1"},
+                {"input": "[5,4,-1,7,8]", "expected": "23"}
+            ],
+            "hints": ["Keep track of current sum and reset it if it becomes negative.", "Update max sum at each step."],
+            "difficulty": difficulty,
+            "topic": "arrays"
+        },
+    ]
+
+
 def generate_coding_problem(role, difficulty="medium"):
     topic_map = {
         "frontend":    ["array methods", "string operations", "async/await", "closures"],
@@ -243,40 +411,7 @@ Return ONLY valid JSON with no extra text:
 }}"""
 
     result = _parse(_gemini(prompt, temp=0.8))
-    return result or {
-        "title": "Two Sum",
-        "description": "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target. You may assume that each input would have exactly one solution, and you may not use the same element twice.",
-        "examples": [
-            {
-                "input": "[2, 7, 11, 15], target = 9",
-                "output": "[0, 1]",
-                "explanation": "nums[0] + nums[1] = 2 + 7 = 9, so we return [0, 1]."
-            }
-        ],
-        "constraints": [
-            "2 <= nums.length <= 10^4",
-            "-10^9 <= nums[i] <= 10^9",
-            "Only one valid answer exists"
-        ],
-        "starter_code": {
-            "python":     "def two_sum(nums, target):\n    # Write your code here\n    pass",
-            "javascript": "function twoSum(nums, target) {\n  // Write your code here\n}",
-            "java":       "class Solution {\n  public int[] twoSum(int[] nums, int target) {\n    // Write your code here\n    return new int[]{};\n  }\n}",
-            "cpp":        "#include<bits/stdc++.h>\nusing namespace std;\nvector<int> twoSum(vector<int>& nums, int target) {\n  // Write your code here\n  return {};\n}",
-            "c":          "#include<stdio.h>\nint* twoSum(int* nums, int n, int target) {\n  // Write your code here\n  return NULL;\n}"
-        },
-        "test_cases": [
-            {"input": "[2,7,11,15]\n9", "expected": "[0, 1]"},
-            {"input": "[3,2,4]\n6",     "expected": "[1, 2]"},
-            {"input": "[3,3]\n6",       "expected": "[0, 1]"}
-        ],
-        "hints": [
-            "Consider using a HashMap to store elements you have already seen.",
-            "For each element, check if its complement (target - element) exists in the map."
-        ],
-        "difficulty": difficulty,
-        "topic":      "arrays"
-    }
+    return result or random.choice(_FALLBACK_PROBLEMS(difficulty))
 
 
 # ══════════════════════════════════
