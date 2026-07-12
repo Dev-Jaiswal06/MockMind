@@ -34,6 +34,7 @@ def start_interview():
     user_id = get_jwt_identity()
     role    = request.form.get("role",  "Full Stack Developer")
     i_type  = request.form.get("type",  "role")
+    round_type = request.form.get("round", "technical")
     num_q   = int(request.form.get("questions", 8))
     resume  = request.files.get("resume")
 
@@ -44,6 +45,7 @@ def start_interview():
     seed = random.randint(10000, 99999)
     qs   = generate_questions(
         role=role,
+        round_type=round_type,
         resume_text=resume_text if i_type != "role" else None,
         num_q=num_q, seed=seed
     )
