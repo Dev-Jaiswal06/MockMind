@@ -1,14 +1,12 @@
 // frontend/src/pages/Coding.jsx
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Editor                  from "@monaco-editor/react"
-import { motion }              from "framer-motion"
 import API                     from "../utils/api"
 import toast                   from "react-hot-toast"
 
 // ── Languages supported ──
 const LANGUAGES = [
   { id: "python",     label: "Python",     icon: "🐍" },
-
   { id: "java",       label: "Java",       icon: "☕" },
   { id: "cpp",        label: "C++",        icon: "⚡" },
   { id: "c",          label: "C",          icon: "🔵" },
@@ -26,6 +24,20 @@ const ROLES = [
   "Data Science", "Python Developer",
 ]
 
+const STATUS_STYLES = {
+  "Passed":              { bg: "rgba(16,185,129,.12)",  border: "#10b981",  color: "#10b981"  },
+  "Success":             { bg: "rgba(16,185,129,.12)",  border: "#10b981",  color: "#10b981"  },
+  "Compilation Error":   { bg: "rgba(239,68,68,.12)",   border: "#ef4444",  color: "#ef4444"  },
+  "Runtime Error":       { bg: "rgba(239,68,68,.12)",   border: "#ef4444",  color: "#ef4444"  },
+  "Wrong Answer":        { bg: "rgba(245,158,11,.12)",  border: "#f59e0b",  color: "#f59e0b"  },
+  "Time Limit Exceeded": { bg: "rgba(168,85,247,.12)",  border: "#a855f7",  color: "#a855f7"  },
+  "Error":               { bg: "rgba(239,68,68,.12)",   border: "#ef4444",  color: "#ef4444"  },
+}
+
+function getStatusStyle(status) {
+  return STATUS_STYLES[status] || STATUS_STYLES["Error"]
+}
+
 export default function Coding() {
   // ── State ──
   const [problem,    setProblem]    = useState(null)
@@ -41,15 +53,8 @@ export default function Coding() {
   const [activeTab,  setActiveTab]  = useState("problem")
   const fetched = useRef(false)
 
-  // ── Load problem on mount ──
-  useEffect(() => {
-    if (fetched.current) return
-    fetched.current = true
-    fetchProblem()
-  }, [])
-
   // ── Fetch new problem ──
-  const fetchProblem = async () => {
+  const fetchProblem = useCallback(async () => {
     setLoading(true)
     setResults(null)
     setOutput(null)
@@ -59,15 +64,21 @@ export default function Coding() {
       })
       const p = res.data.problem
       setProblem(p)
-      // Set starter code for selected language
       setCode(p.starter_code?.[language] || "# Write your code here\n")
       toast.success("New problem loaded!")
-    } catch (err) {
+    } catch {
       toast.error("Failed to load problem. Please try again.")
     } finally {
       setLoading(false)
     }
-  }
+  }, [role, difficulty, language])
+
+  // ── Load problem on mount ──
+  useEffect(() => {
+    if (fetched.current) return
+    fetched.current = true
+    fetchProblem()
+  }, [fetchProblem])
   
   // ── When language changes update starter code ──
   const handleLanguageChange = (lang) => {
@@ -84,6 +95,7 @@ export default function Coding() {
       return
     }
     setRunning(true)
+    setOutput(null)
     setActiveTab("output")
     try {
       const res = await API.post("/api/coding/run", {
@@ -92,7 +104,7 @@ export default function Coding() {
         stdin: ""
       })
       setOutput(res.data)
-    } catch (err) {
+    } catch {
       toast.error("Code execution failed!")
     } finally {
       setRunning(false)
@@ -107,6 +119,7 @@ export default function Coding() {
     }
     if (!problem) return
     setSubmitting(true)
+    setResults(null)
     setActiveTab("results")
     try {
       const res = await API.post("/api/coding/submit", {
@@ -117,11 +130,11 @@ export default function Coding() {
       })
       setResults(res.data)
       if (res.data.all_passed) {
-        toast.success("All test cases passed! 🎉")
+        toast.success("All test cases passed!")
       } else {
         toast.error(`${res.data.passed}/${res.data.total} test cases passed`)
       }
-    } catch (err) {
+    } catch {
       toast.error("Submission failed!")
     } finally {
       setSubmitting(false)
@@ -237,7 +250,7 @@ export default function Coding() {
           {/* Run button */}
           <button
             onClick={handleRun}
-            disabled={running}
+            disabled={running || submitting}
             className="btn"
             style={{
               background:   "rgba(16,185,129,.15)",
@@ -245,20 +258,27 @@ export default function Coding() {
               color:        "#10b981",
               padding:      "7px 16px",
               fontSize:     ".82rem",
-              fontWeight:   700
+              fontWeight:   700,
+              opacity:      (running || submitting) ? 0.5 : 1,
+              cursor:       (running || submitting) ? "not-allowed" : "pointer"
             }}
           >
-            {running ? "Running..." : "▶️ Run"}
+            {running ? "⏳ Running..." : "▶️ Run"}
           </button>
 
           {/* Submit button */}
           <button
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || running}
             className="btn btnp"
-            style={{ padding: "7px 16px", fontSize: ".82rem" }}
+            style={{
+              padding:  "7px 16px",
+              fontSize: ".82rem",
+              opacity:  (submitting || running) ? 0.5 : 1,
+              cursor:   (submitting || running) ? "not-allowed" : "pointer"
+            }}
           >
-            {submitting ? "Submitting..." : "Submit"}
+            {submitting ? "⏳ Submitting..." : "🚀 Submit"}
           </button>
         </div>
       </div>
@@ -266,7 +286,7 @@ export default function Coding() {
       {/* ── Main Content ── */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
-        {/* ── LEFT PANEL — Problem ── */}
+        {/* ── LEFT PANEL — Problem / Output / Results ── */}
         <div style={{
           width:       "40%",
           borderRight: "1px solid var(--bdr)",
@@ -293,12 +313,33 @@ export default function Coding() {
                   cursor:      "pointer",
                   fontSize:    ".85rem",
                   fontWeight:  600,
-                  textTransform: "capitalize"
+                  textTransform: "capitalize",
+                  position:    "relative"
                 }}
               >
                 {tab === "problem"  ? "📋 Problem"  : ""}
                 {tab === "output"   ? "▶️ Output"    : ""}
                 {tab === "results"  ? "🧪 Results"  : ""}
+                {/* Badge showing result count */}
+                {tab === "results" && results && (
+                  <span style={{
+                    position:    "absolute",
+                    top:         "4px",
+                    right:       "4px",
+                    background:  results.all_passed ? "#10b981" : "#ef4444",
+                    color:       "#fff",
+                    fontSize:    ".6rem",
+                    fontWeight:  700,
+                    borderRadius: "50%",
+                    width:       "16px",
+                    height:      "16px",
+                    display:     "flex",
+                    alignItems:  "center",
+                    justifyContent: "center"
+                  }}>
+                    {results.passed}/{results.total}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -306,7 +347,7 @@ export default function Coding() {
           {/* Tab Content */}
           <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
 
-            {/* Problem Tab */}
+            {/* ── Problem Tab ── */}
             {activeTab === "problem" && problem && (
               <div>
                 <h2 style={{ fontSize: "1.2rem", fontWeight: 800, marginBottom: "12px" }}>
@@ -381,37 +422,91 @@ export default function Coding() {
               </div>
             )}
 
-            {/* Output Tab */}
+            {/* ── Output Tab ── */}
             {activeTab === "output" && (
               <div>
                 <h3 style={{ marginBottom: "14px", fontSize: ".95rem" }}>▶️ Code Output</h3>
                 {running ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", color: "var(--t2)" }}>
-                    <div className="spinner" style={{ width: 24, height: 24 }}/>
-                    Running your code...
+                  <div style={{
+                    display:       "flex",
+                    flexDirection: "column",
+                    alignItems:    "center",
+                    justifyContent:"center",
+                    gap:           "16px",
+                    padding:       "40px 0",
+                    color:         "var(--t2)"
+                  }}>
+                    <div className="spinner" style={{ width: 36, height: 36 }}/>
+                    <div style={{ fontSize: ".9rem", fontWeight: 600 }}>Executing your code...</div>
+                    <div style={{ fontSize: ".78rem", color: "var(--t2)", opacity: 0.7 }}>
+                      This may take a few seconds
+                    </div>
                   </div>
                 ) : output ? (
                   <div>
-                    {/* Status */}
+                    {/* Status Badge */}
                     <div style={{
-                      display:      "inline-block",
-                      background:   output.exit_code === 0 ? "rgba(16,185,129,.15)" : "rgba(239,68,68,.15)",
-                      border:       `1px solid ${output.exit_code === 0 ? "#10b981" : "#ef4444"}`,
-                      color:        output.exit_code === 0 ? "#10b981" : "#ef4444",
+                      display:      "inline-flex",
+                      alignItems:   "center",
+                      gap:          "6px",
+                      background:   getStatusStyle(output.status).bg,
+                      border:       `1px solid ${getStatusStyle(output.status).border}`,
+                      color:        getStatusStyle(output.status).color,
                       borderRadius: "8px",
-                      padding:      "4px 12px",
+                      padding:      "5px 14px",
                       fontSize:     ".8rem",
                       fontWeight:   700,
-                      marginBottom: "12px"
+                      marginBottom: "16px"
                     }}>
+                      {output.status === "Success" ? "✅" : output.status === "Compilation Error" ? "🔧" : output.status === "Time Limit Exceeded" ? "⏱️" : "❌"}
                       {output.status}
                     </div>
 
-                    {/* Stdout */}
-                    {output.stdout && (
-                      <div>
-                        <div style={{ fontSize: ".8rem", color: "var(--t2)", marginBottom: "6px" }}>
-                          Output:
+                    {/* Compilation Error — Compiler Logs */}
+                    {output.compile_stderr && (
+                      <div style={{ marginBottom: "14px" }}>
+                        <div style={{
+                          fontSize:     ".8rem",
+                          fontWeight:   700,
+                          color:        "#ef4444",
+                          marginBottom: "6px",
+                          display:      "flex",
+                          alignItems:   "center",
+                          gap:          "6px"
+                        }}>
+                          🔧 Compiler Error
+                        </div>
+                        <pre style={{
+                          background:   "rgba(239,68,68,.06)",
+                          border:       "1px solid rgba(239,68,68,.3)",
+                          borderRadius: "8px",
+                          padding:      "12px",
+                          fontSize:     ".82rem",
+                          color:        "#fca5a5",
+                          overflowX:    "auto",
+                          whiteSpace:   "pre-wrap",
+                          lineHeight:   1.6,
+                          maxHeight:    "300px",
+                          overflow:     "auto"
+                        }}>
+                          {output.compile_stderr}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* Stdout — Program Output */}
+                    {output.stdout ? (
+                      <div style={{ marginBottom: "14px" }}>
+                        <div style={{
+                          fontSize:     ".8rem",
+                          fontWeight:   700,
+                          color:        "#10b981",
+                          marginBottom: "6px",
+                          display:      "flex",
+                          alignItems:   "center",
+                          gap:          "6px"
+                        }}>
+                          📤 Output
                         </div>
                         <pre style={{
                           background:   "rgba(0,0,0,.3)",
@@ -421,123 +516,301 @@ export default function Coding() {
                           fontSize:     ".85rem",
                           color:        "#10b981",
                           overflowX:    "auto",
-                          whiteSpace:   "pre-wrap"
+                          whiteSpace:   "pre-wrap",
+                          lineHeight:   1.6,
+                          maxHeight:    "300px",
+                          overflow:     "auto"
                         }}>
                           {output.stdout}
                         </pre>
                       </div>
+                    ) : (
+                      !output.compile_stderr && (
+                        <div style={{
+                          padding:       "12px 16px",
+                          background:    "rgba(255,255,255,.03)",
+                          border:        "1px solid var(--bdr)",
+                          borderRadius:  "8px",
+                          fontSize:      ".85rem",
+                          color:         "var(--t2)",
+                          marginBottom:  "14px"
+                        }}>
+                          Program produced no output.
+                        </div>
+                      )
                     )}
 
-                    {/* Stderr */}
-                    {output.stderr && (
-                      <div style={{ marginTop: "10px" }}>
-                        <div style={{ fontSize: ".8rem", color: "#ef4444", marginBottom: "6px" }}>
-                          Error:
+                    {/* Runtime Error — Runtime Logs */}
+                    {output.run_stderr && !output.compile_stderr && (
+                      <div style={{ marginBottom: "14px" }}>
+                        <div style={{
+                          fontSize:     ".8rem",
+                          fontWeight:   700,
+                          color:        "#ef4444",
+                          marginBottom: "6px",
+                          display:      "flex",
+                          alignItems:   "center",
+                          gap:          "6px"
+                        }}>
+                          ❌ Runtime Error
                         </div>
                         <pre style={{
-                          background:   "rgba(239,68,68,.05)",
+                          background:   "rgba(239,68,68,.06)",
                           border:       "1px solid rgba(239,68,68,.3)",
                           borderRadius: "8px",
                           padding:      "12px",
-                          fontSize:     ".85rem",
-                          color:        "#ef4444",
+                          fontSize:     ".82rem",
+                          color:        "#fca5a5",
                           overflowX:    "auto",
-                          whiteSpace:   "pre-wrap"
+                          whiteSpace:   "pre-wrap",
+                          lineHeight:   1.6,
+                          maxHeight:    "300px",
+                          overflow:     "auto"
                         }}>
-                          {output.stderr}
+                          {output.run_stderr}
                         </pre>
                       </div>
                     )}
+
+                    {/* Exit Code */}
+                    <div style={{
+                      fontSize:     ".75rem",
+                      color:        "var(--t2)",
+                      opacity:      0.6,
+                      borderTop:    "1px solid var(--bdr)",
+                      paddingTop:   "10px",
+                      marginTop:    "4px"
+                    }}>
+                      Exit Code: {output.exit_code}
+                    </div>
                   </div>
                 ) : (
-                  <p style={{ color: "var(--t2)", fontSize: ".9rem" }}>
-                    Click "▶️ Run" to execute your code.
-                  </p>
+                  <div style={{
+                    display:        "flex",
+                    flexDirection:  "column",
+                    alignItems:     "center",
+                    justifyContent: "center",
+                    padding:        "40px 0",
+                    color:          "var(--t2)",
+                    gap:            "8px"
+                  }}>
+                    <span style={{ fontSize: "2rem", opacity: 0.3 }}>▶️</span>
+                    <p style={{ fontSize: ".9rem" }}>
+                      Click <strong>"▶️ Run"</strong> to execute your code.
+                    </p>
+                    <p style={{ fontSize: ".78rem", opacity: 0.6 }}>
+                      Output, compiler logs and runtime errors will appear here.
+                    </p>
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Results Tab */}
+            {/* ── Results Tab ── */}
             {activeTab === "results" && (
               <div>
                 <h3 style={{ marginBottom: "14px", fontSize: ".95rem" }}>🧪 Test Results</h3>
                 {submitting ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", color: "var(--t2)" }}>
-                    <div className="spinner" style={{ width: 24, height: 24 }}/>
-                    Running test cases...
+                  <div style={{
+                    display:       "flex",
+                    flexDirection: "column",
+                    alignItems:    "center",
+                    justifyContent:"center",
+                    gap:           "16px",
+                    padding:       "40px 0",
+                    color:         "var(--t2)"
+                  }}>
+                    <div className="spinner" style={{ width: 36, height: 36 }}/>
+                    <div style={{ fontSize: ".9rem", fontWeight: 600 }}>Running test cases...</div>
+                    <div style={{ fontSize: ".78rem", color: "var(--t2)", opacity: 0.7 }}>
+                      Executing against all test cases
+                    </div>
                   </div>
                 ) : results ? (
                   <div>
-                    {/* Score */}
+                    {/* Overall Score Card */}
                     <div style={{
                       display:       "flex",
                       alignItems:    "center",
-                      gap:           "12px",
-                      marginBottom:  "16px",
-                      padding:       "16px",
+                      gap:           "16px",
+                      marginBottom:  "20px",
+                      padding:       "18px",
                       borderRadius:  "12px",
-                      background:    results.all_passed ? "rgba(16,185,129,.1)" : "rgba(239,68,68,.1)",
+                      background:    results.all_passed ? "rgba(16,185,129,.08)" : "rgba(239,68,68,.08)",
                       border:        `1px solid ${results.all_passed ? "#10b981" : "#ef4444"}`
                     }}>
-                      <div style={{ fontSize: "2rem" }}>
-                        {results.all_passed ? "🎉" : "❌"}
+                      {/* Score circle */}
+                      <div style={{
+                        width:         "60px",
+                        height:        "60px",
+                        borderRadius:  "50%",
+                        border:        `3px solid ${results.all_passed ? "#10b981" : "#ef4444"}`,
+                        display:       "flex",
+                        flexDirection: "column",
+                        alignItems:    "center",
+                        justifyContent:"center",
+                        flexShrink:    0
+                      }}>
+                        <div style={{
+                          fontWeight: 800,
+                          fontSize:   "1.1rem",
+                          lineHeight: 1,
+                          color:      results.all_passed ? "#10b981" : "#ef4444"
+                        }}>
+                          {Math.round(results.score)}%
+                        </div>
                       </div>
                       <div>
                         <div style={{
                           fontWeight: 800,
-                          fontSize:   "1.2rem",
+                          fontSize:   "1rem",
                           color:      results.all_passed ? "#10b981" : "#ef4444"
                         }}>
-                          {results.passed}/{results.total} Passed
+                          {results.passed} / {results.total} Test Cases Passed
                         </div>
-                        <div style={{ fontSize: ".8rem", color: "var(--t2)" }}>
-                          Score: {results.score}%
+                        <div style={{ fontSize: ".8rem", color: "var(--t2)", marginTop: "2px" }}>
+                          {results.overall_status || (results.all_passed ? "All Passed" : "Some Failed")}
                         </div>
                       </div>
                     </div>
 
                     {/* Individual test cases */}
-                    {results.results?.map((tc, i) => (
-                      <div key={i} style={{
-                        padding:      "12px",
-                        borderRadius: "10px",
-                        background:   "rgba(255,255,255,.02)",
-                        border:       `1px solid ${tc.passed ? "rgba(16,185,129,.3)" : "rgba(239,68,68,.3)"}`,
-                        marginBottom: "8px"
-                      }}>
-                        <div style={{
-                          display:        "flex",
-                          justifyContent: "space-between",
-                          marginBottom:   "8px"
+                    {results.results?.map((tc, i) => {
+                      const tcStyle = getStatusStyle(tc.status)
+                      return (
+                        <div key={i} style={{
+                          padding:       "14px",
+                          borderRadius:  "10px",
+                          background:    tcStyle.bg,
+                          border:        `1px solid ${tcStyle.border}33`,
+                          marginBottom:  "10px"
                         }}>
-                          <span style={{ fontWeight: 600, fontSize: ".85rem" }}>
-                            Test Case {tc.test_case}
-                          </span>
-                          <span style={{
-                            color:      tc.passed ? "#10b981" : "#ef4444",
-                            fontWeight: 700,
-                            fontSize:   ".82rem"
+                          {/* Header row */}
+                          <div style={{
+                            display:        "flex",
+                            justifyContent: "space-between",
+                            alignItems:     "center",
+                            marginBottom:   "10px"
                           }}>
-                            {tc.passed ? "✅ PASSED" : "❌ FAILED"}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: ".8rem", color: "var(--t2)" }}>
-                          <span>Expected: </span>
-                          <code style={{ color: "#10b981" }}>{tc.expected}</code>
-                        </div>
-                        {!tc.passed && (
-                          <div style={{ fontSize: ".8rem", color: "var(--t2)", marginTop: "4px" }}>
-                            <span>Got: </span>
-                            <code style={{ color: "#ef4444" }}>{tc.got || "No output"}</code>
+                            <span style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--t1)" }}>
+                              Test Case {tc.test_case}
+                            </span>
+                            <span style={{
+                              color:      tcStyle.color,
+                              fontWeight: 700,
+                              fontSize:   ".78rem",
+                              background: `${tcStyle.border}15`,
+                              padding:    "3px 10px",
+                              borderRadius: "20px",
+                              border:     `1px solid ${tcStyle.border}44`
+                            }}>
+                              {tc.passed ? "✅ PASSED" : `❌ ${tc.status}`}
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    ))}
+
+                          {/* Input */}
+                          {tc.input && (
+                            <div style={{ marginBottom: "6px" }}>
+                              <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                                Input:
+                              </div>
+                              <code style={{
+                                display:     "block",
+                                background:  "rgba(0,0,0,.2)",
+                                padding:     "8px 10px",
+                                borderRadius: "6px",
+                                fontSize:    ".8rem",
+                                color:       "#93c5fd",
+                                whiteSpace:  "pre-wrap",
+                                wordBreak:   "break-all"
+                              }}>
+                                {tc.input || "(empty)"}
+                              </code>
+                            </div>
+                          )}
+
+                          {/* Expected */}
+                          <div style={{ marginBottom: "6px" }}>
+                            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                              Expected Output:
+                            </div>
+                            <code style={{
+                              display:     "block",
+                              background:  "rgba(0,0,0,.2)",
+                              padding:     "8px 10px",
+                              borderRadius: "6px",
+                              fontSize:    ".8rem",
+                              color:       "#10b981",
+                              whiteSpace:  "pre-wrap",
+                              wordBreak:   "break-all"
+                            }}>
+                              {tc.expected || "(empty)"}
+                            </code>
+                          </div>
+
+                          {/* Got */}
+                          <div style={{ marginBottom: "6px" }}>
+                            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                              Your Output:
+                            </div>
+                            <code style={{
+                              display:     "block",
+                              background:  "rgba(0,0,0,.2)",
+                              padding:     "8px 10px",
+                              borderRadius: "6px",
+                              fontSize:    ".8rem",
+                              color:       tc.passed ? "#10b981" : "#ef4444",
+                              whiteSpace:  "pre-wrap",
+                              wordBreak:   "break-all"
+                            }}>
+                              {tc.got || "(no output)"}
+                            </code>
+                          </div>
+
+                          {/* Error Message */}
+                          {tc.error_message && (
+                            <div style={{ marginTop: "8px" }}>
+                              <div style={{ fontSize: ".75rem", color: "#ef4444", marginBottom: "3px", fontWeight: 600 }}>
+                                Error Details:
+                              </div>
+                              <pre style={{
+                                background:  "rgba(239,68,68,.06)",
+                                border:      "1px solid rgba(239,68,68,.25)",
+                                borderRadius:"6px",
+                                padding:     "8px 10px",
+                                fontSize:    ".78rem",
+                                color:       "#fca5a5",
+                                whiteSpace:  "pre-wrap",
+                                wordBreak:   "break-word",
+                                maxHeight:   "150px",
+                                overflow:    "auto"
+                              }}>
+                                {tc.error_message}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 ) : (
-                  <p style={{ color: "var(--t2)", fontSize: ".9rem" }}>
-                    Click "Submit" to run against all test cases.
-                  </p>
+                  <div style={{
+                    display:        "flex",
+                    flexDirection:  "column",
+                    alignItems:     "center",
+                    justifyContent: "center",
+                    padding:        "40px 0",
+                    color:          "var(--t2)",
+                    gap:            "8px"
+                  }}>
+                    <span style={{ fontSize: "2rem", opacity: 0.3 }}>🧪</span>
+                    <p style={{ fontSize: ".9rem" }}>
+                      Click <strong>"🚀 Submit"</strong> to run against all test cases.
+                    </p>
+                    <p style={{ fontSize: ".78rem", opacity: 0.6 }}>
+                      Detailed results with input, expected &amp; actual output will appear here.
+                    </p>
+                  </div>
                 )}
               </div>
             )}

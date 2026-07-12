@@ -4,8 +4,50 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from dotenv import load_dotenv
 import os
+import sys
+import socket
+import subprocess
+import logging
 
 load_dotenv()
+
+# ── Kill any old process using port 5000 ──
+def _kill_stale_on_port(port):
+    try:
+        result = subprocess.run(
+            ["netstat", "-ano"],
+            capture_output=True, text=True, timeout=5
+        )
+        pids = set()
+        for line in result.stdout.splitlines():
+            if f":{port}" in line and "LISTENING" in line:
+                parts = line.split()
+                if parts:
+                    pids.add(parts[-1])
+        my_pid = str(os.getpid())
+        for pid in pids:
+            if pid != my_pid and pid.isdigit():
+                subprocess.run(
+                    ["taskkill", "/F", "/PID", pid, "/T"],
+                    capture_output=True, timeout=5
+                )
+                print(f"  Killed stale process PID {pid}")
+        if pids:
+            import time; time.sleep(1)
+    except Exception as e:
+        print(f"  Port cleanup skipped: {e}")
+
+PORT = 5000
+_kill_stale_on_port(PORT)
+
+# ── Logging ──
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("pymongo").setLevel(logging.WARNING)
 
 from auth      import auth_bp
 from interview import interview_bp
@@ -17,12 +59,7 @@ app = Flask(__name__)
 app.config["JWT_SECRET_KEY"]           = os.getenv("JWT_SECRET_KEY","dev")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = 86400
 
-
-CORS(app,origins=[
-        "http://localhost:5173",
-        "http://localhost:3000"
-    ]
-)
+CORS(app, origins=["http://localhost:5173", "http://localhost:3000"])
 jwt = JWTManager(app)
 
 app.register_blueprint(auth_bp)
@@ -32,16 +69,20 @@ app.register_blueprint(reports_bp)
 
 @app.route("/api/health")
 def health():
-    return {"status":"ok","app":"MockMind 🧠"}
+    return {"status": "ok", "app": "MockMind"}
 
 with app.app_context():
     init_db()
 
 if __name__ == "__main__":
-    print("\n🧠 MockMind Backend Starting...")
-    print("📍 http://localhost:5000\n")
+    print("\n" + "=" * 50)
+    print("  MockMind Backend — PID:", os.getpid())
+    print("  http://localhost:5000")
+    print("=" * 50 + "\n")
+    sys.stdout.flush()
     app.run(
-    port=5000,
-    debug=True,
-    use_reloader=False
+        host="127.0.0.1",
+        port=PORT,
+        debug=True,
+        use_reloader=False,
     )
