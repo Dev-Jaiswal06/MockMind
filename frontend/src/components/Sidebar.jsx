@@ -1,5 +1,5 @@
 // frontend/src/components/Sidebar.jsx
-import { useState }              from "react"
+import { useState, useEffect }     from "react"
 import { Link, useLocation }     from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { useAuth }               from "../context/AuthContext"
@@ -15,6 +15,16 @@ export default function Sidebar() {
   const { user, logout }    = useAuth()
   const location            = useLocation()
   const [collapsed, setCol] = useState(false)
+  const [dark, setDark]     = useState(() => {
+    const saved = localStorage.getItem("mm-theme")
+    if (saved) return saved === "dark"
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+  })
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark)
+    localStorage.setItem("mm-theme", dark ? "dark" : "light")
+  }, [dark])
 
   return (
     <motion.div
@@ -22,8 +32,8 @@ export default function Sidebar() {
       transition={{ duration: .3, ease: "easeInOut" }}
       style={{
         height:        "100vh",
-        background:    "#0e0e1c",
-        borderRight:   "1px solid rgba(255,255,255,.08)",
+        background:    "var(--bg2)",
+        borderRight:   "1px solid var(--bdr)",
         display:       "flex",
         flexDirection: "column",
         position:      "sticky",
@@ -36,7 +46,7 @@ export default function Sidebar() {
       {/* ── Logo ── */}
       <div style={{
         padding:        "20px 16px",
-        borderBottom:   "1px solid rgba(255,255,255,.06)",
+        borderBottom:   "1px solid var(--bdr)",
         display:        "flex",
         alignItems:     "center",
         justifyContent: "space-between"
@@ -56,7 +66,7 @@ export default function Sidebar() {
               }}>
                 Mock
               </span>
-              <span style={{ color: "#f1f5f9" }}>Mind</span>
+              <span style={{ color: "var(--t1)" }}>Mind</span>
               <span style={{ marginLeft: "4px" }}>🧠</span>
             </motion.div>
           )}
@@ -66,10 +76,10 @@ export default function Sidebar() {
         <button
           onClick={() => setCol(!collapsed)}
           style={{
-            background:   "rgba(255,255,255,.06)",
-            border:       "1px solid rgba(255,255,255,.1)",
+            background:   "var(--card)",
+            border:       "1px solid var(--bdr)",
             borderRadius: "8px",
-            color:        "#94a3b8",
+            color:        "var(--t2)",
             cursor:       "pointer",
             padding:      "6px 8px",
             fontSize:     ".8rem",
@@ -121,7 +131,7 @@ export default function Sidebar() {
                       animate={{ opacity: 1, width: "auto" }}
                       exit={{ opacity: 0, width: 0 }}
                       style={{
-                        color:      isActive ? "#a78bfa" : "#94a3b8",
+                        color:      isActive ? "var(--pl)" : "var(--t2)",
                         fontWeight: isActive ? 700 : 500,
                         fontSize:   ".9rem",
                         whiteSpace: "nowrap",
@@ -154,10 +164,46 @@ export default function Sidebar() {
         })}
       </nav>
 
+      {/* ── Theme Toggle ── */}
+      <div style={{ padding: "6px 10px" }}>
+        <button
+          onClick={() => setDark(d => !d)}
+          style={{
+            width:        "100%",
+            padding:      collapsed ? "10px" : "9px 14px",
+            borderRadius: "10px",
+            border:       "1px solid var(--bdr)",
+            background:   "var(--card)",
+            color:        "var(--t2)",
+            cursor:       "pointer",
+            fontSize:     ".82rem",
+            fontWeight:   600,
+            display:      "flex",
+            alignItems:   "center",
+            justifyContent: collapsed ? "center" : "flex-start",
+            gap:          "8px",
+            transition:   "all .2s"
+          }}
+        >
+          <span style={{ fontSize: "1.1rem" }}>{dark ? "☀️" : "🌙"}</span>
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                {dark ? "Light Mode" : "Dark Mode"}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
+      </div>
+
       {/* ── User Profile at Bottom ── */}
       <div style={{
         padding:     "12px 10px",
-        borderTop:   "1px solid rgba(255,255,255,.06)"
+        borderTop:   "1px solid var(--bdr)"
       }}>
         {/* User info */}
         <div style={{
@@ -166,7 +212,7 @@ export default function Sidebar() {
           gap:          "10px",
           padding:      "8px 10px",
           borderRadius: "10px",
-          background:   "rgba(255,255,255,.04)",
+          background:   "var(--card)",
           marginBottom: "8px",
           minWidth:     0
         }}>
@@ -209,7 +255,7 @@ export default function Sidebar() {
                   <div style={{
                     fontWeight: 600,
                     fontSize: ".85rem",
-                    color: "#f1f5f9",
+                    color: "var(--t1)",
                     whiteSpace: "normal",
                     overflowWrap: "anywhere",
                     wordBreak: "break-word",
@@ -230,8 +276,8 @@ export default function Sidebar() {
             width:        "100%",
             padding:      collapsed ? "10px" : "9px 14px",
             borderRadius: "10px",
-            border:       "1px solid rgba(239,68,68,.25)",
-            background:   "rgba(239,68,68,.08)",
+            border:       "1px solid var(--err)",
+            background:   "var(--card)",
             color:        "#ef4444",
             cursor:       "pointer",
             fontSize:     ".82rem",

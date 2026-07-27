@@ -1,10 +1,13 @@
 # backend/auth.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from models import users_col, stats_col
-from datetime import datetime
+from models import users_col, stats_col, password_resets_col
+from datetime import datetime, timedelta
 from bson import ObjectId
+from email_utils import send_reset_email
 import bcrypt
+import secrets
+import os
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -92,3 +95,89 @@ def get_me():
         },
         "stats": {k: v for k, v in (stats or {}).items() if k != "_id"}
     })
+
+
+# ── FORGOT PASSWORD ──
+@auth_bp.route("/api/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    data  = request.get_json() or {}
+    email = data.get("email", "").strip().lower()
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    # Rate limiting: 10 requests per email per hour
+    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+    recent_count = password_resets_col.count_documents({
+        "email":     email,
+        "created_at": {"$gte": one_hour_ago.isoformat()}
+    })
+    if recent_count >= 10:
+        return jsonify({"error": "Too many requests. Try again later."}), 429
+
+    # Always return same response — email existence na reveal karo
+    user = users_col.find_one({"email": email})
+    if not user:
+        return jsonify({"message": "If that email exists, a reset link has been sent."}), 200
+
+    # Purane tokens delete karo is email ke liye
+    password_resets_col.delete_many({"email": email})
+
+    # Naya token banao (random string + expiry)
+    token = secrets.token_urlsafe(32)
+    password_resets_col.insert_one({
+        "email":      email,
+        "token":      token,
+        "created_at": datetime.utcnow().isoformat(),
+        "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat(),
+        "used":       False
+    })
+
+    # Frontend link banao
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    reset_link   = f"{frontend_url}/reset-password?token={token}"
+
+    # Email bhejo
+    send_reset_email(email, reset_link)
+
+    return jsonify({"message": "If that email exists, a reset link has been sent."}), 200
+
+
+# ── RESET PASSWORD ──
+@auth_bp.route("/api/auth/reset-password", methods=["POST"])
+def reset_password():
+    data         = request.get_json() or {}
+    token        = data.get("token",    "").strip()
+    new_password = data.get("password", "")
+
+    if not token or not new_password:
+        return jsonify({"error": "Token and password are required"}), 400
+    if len(new_password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    # Token dhundho
+    record = password_resets_col.find_one({"token": token, "used": False})
+    if not record:
+        return jsonify({"error": "Invalid or expired reset link"}), 400
+
+    # Check expiry
+    expires_at = datetime.fromisoformat(record["expires_at"])
+    if datetime.utcnow() > expires_at:
+        password_resets_col.delete_one({"_id": record["_id"]})
+        return jsonify({"error": "Reset link has expired. Request a new one."}), 400
+
+    # Password update karo
+    email     = record["email"]
+    new_hash  = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    users_col.update_one(
+        {"email": email},
+        {"$set": {"password_hash": new_hash}}
+    )
+
+    # Token mark as used
+    password_resets_col.update_one(
+        {"_id": record["_id"]},
+        {"$set": {"used": True}}
+    )
+
+    return jsonify({"message": "Password updated successfully. You can now log in."}), 200

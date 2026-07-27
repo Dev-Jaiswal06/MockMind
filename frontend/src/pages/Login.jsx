@@ -42,8 +42,13 @@ export default function Login() {
       justifyContent:  "center",
       background:      "var(--bg)",
       padding:         "20px",
-      gap:             "50px"
+      gap:             "50px",
+      position:        "relative",
+      overflow:         "hidden"
     }}>
+      {/* Ambient gradient orbs */}
+      <div className="orb orb-1"/>
+      <div className="orb orb-2"/>
       {/* Robot — desktop only */}
       <motion.div
         className="hm"
@@ -66,6 +71,11 @@ export default function Login() {
         animate={{ opacity: 1, y:  0 }}
       >
         <div style={{ textAlign: "center", marginBottom: "28px" }}>
+          <div className="mm" style={{ fontSize: "2rem", marginBottom: "8px" }}>
+            <span className="gt" style={{ fontWeight: 900 }}>Mock</span>
+            <span style={{ fontWeight: 900 }}>Mind</span>
+            <span style={{ marginLeft: "4px" }}>🧠</span>
+          </div>
           <h1 style={{ fontSize: "1.9rem", fontWeight: 800, marginBottom: "6px" }}>
             Welcome Back
           </h1>
@@ -113,8 +123,16 @@ export default function Login() {
                   </button>
                 )}
               </div>
-            </div>
-          ))}
+          </div>
+            ))}
+
+          <div style={{ textAlign: "right", marginTop: "-8px" }}>
+            <Link to="/forgot-password" style={{
+              fontSize: ".82rem", color: "var(--pl)", fontWeight: 600, textDecoration: "none"
+            }}>
+              Forgot Password?
+            </Link>
+          </div>
 
           <motion.button
             type="submit"

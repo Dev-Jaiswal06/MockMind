@@ -18,11 +18,7 @@ const DIFFICULTIES = [
   { id: "hard",   label: "Hard",   color: "#ef4444" },
 ]
 
-const ROLES = [
-  "Frontend Developer", "Backend Developer",
-  "Full Stack Developer", "Machine Learning",
-  "Data Science", "Python Developer",
-]
+
 
 const STATUS_STYLES = {
   "Passed":              { bg: "rgba(16,185,129,.12)",  border: "#10b981",  color: "#10b981"  },
@@ -44,8 +40,7 @@ export default function Coding() {
   const [code,       setCode]       = useState("")
   const [language,   setLanguage]   = useState("python")
   const [difficulty, setDifficulty] = useState("medium")
-  const [role,       setRole]       = useState("Full Stack Developer")
-  const [output,     setOutput]     = useState(null)
+  const [runResults, setRunResults] = useState(null)
   const [results,    setResults]    = useState(null)
   const [loading,    setLoading]    = useState(false)
   const [running,    setRunning]    = useState(false)
@@ -57,10 +52,10 @@ export default function Coding() {
   const fetchProblem = useCallback(async () => {
     setLoading(true)
     setResults(null)
-    setOutput(null)
+    setRunResults(null)
     try {
       const res = await API.get("/api/coding/problem", {
-        params: { role, difficulty }
+        params: { difficulty }
       })
       const p = res.data.problem
       setProblem(p)
@@ -71,7 +66,7 @@ export default function Coding() {
     } finally {
       setLoading(false)
     }
-  }, [role, difficulty, language])
+  }, [difficulty, language])
 
   // ── Load problem on mount ──
   useEffect(() => {
@@ -88,30 +83,40 @@ export default function Coding() {
     }
   }
 
-  // ── Run code ──
+  // ── Run code against example test cases ──
   const handleRun = async () => {
     if (!code.trim()) {
       toast.error("Please write some code first!")
       return
     }
+    if (!problem) return
     setRunning(true)
-    setOutput(null)
-    setActiveTab("output")
+    setRunResults(null)
+    setActiveTab("run")
     try {
-      const res = await API.post("/api/coding/run", {
+      const res = await API.post("/api/coding/run-cases", {
         code,
         language,
-        stdin: ""
+        test_cases: problem.examples?.map(ex => ({
+          input:    ex.input,
+          expected: ex.output
+        })) || []
       })
-      setOutput(res.data)
-    } catch {
-      toast.error("Code execution failed!")
+      setRunResults(res.data)
+      if (res.data.all_passed) {
+        toast.success("All example cases passed!")
+      } else {
+        toast.error(`${res.data.passed}/${res.data.total} example cases passed`)
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || "Code execution failed!"
+      toast.error(msg)
     } finally {
       setRunning(false)
     }
   }
 
-  // ── Submit code against test cases ──
+  // ── Submit code against hidden test cases ──
   const handleSubmit = async () => {
     if (!code.trim()) {
       toast.error("Please write some code first!")
@@ -120,7 +125,7 @@ export default function Coding() {
     if (!problem) return
     setSubmitting(true)
     setResults(null)
-    setActiveTab("results")
+    setActiveTab("submit")
     try {
       const res = await API.post("/api/coding/submit", {
         code,
@@ -134,8 +139,9 @@ export default function Coding() {
       } else {
         toast.error(`${res.data.passed}/${res.data.total} test cases passed`)
       }
-    } catch {
-      toast.error("Submission failed!")
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || "Submission failed!"
+      toast.error(msg)
     } finally {
       setSubmitting(false)
     }
@@ -157,7 +163,7 @@ export default function Coding() {
   )
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "transparent" }}>
 
       {/* ── Top Bar ── */}
       <div style={{
@@ -200,37 +206,17 @@ export default function Coding() {
         {/* Right — Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
 
-          {/* Role selector */}
-          <select
-            value={role}
-            onChange={e => setRole(e.target.value)}
-            style={{
-              background:   "var(--bg)",
-              border:       "1px solid var(--bdr)",
-              color:        "var(--t1)",
-              borderRadius: "8px",
-              padding:      "6px 10px",
-              fontSize:     ".82rem",
-              cursor:       "pointer"
-            }}
-          >
-            {ROLES.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-
           {/* Difficulty selector */}
           <select
             value={difficulty}
             onChange={e => setDifficulty(e.target.value)}
+            className="inp"
             style={{
-              background:   "var(--bg)",
-              border:       "1px solid var(--bdr)",
-              color:        "var(--t1)",
-              borderRadius: "8px",
-              padding:      "6px 10px",
-              fontSize:     ".82rem",
-              cursor:       "pointer"
+              width:     "auto",
+              padding:   "6px 10px",
+              fontSize:  ".82rem",
+              cursor:    "pointer",
+              borderRadius: "8px"
             }}
           >
             {DIFFICULTIES.map(d => (
@@ -292,7 +278,9 @@ export default function Coding() {
           borderRight: "1px solid var(--bdr)",
           display:     "flex",
           flexDirection: "column",
-          overflow:    "hidden"
+          overflow:    "hidden",
+          background:  "var(--card)",
+          borderRadius: "0 16px 16px 0"
         }}>
           {/* Tabs */}
           <div style={{
@@ -300,7 +288,7 @@ export default function Coding() {
             borderBottom: "1px solid var(--bdr)",
             background:  "var(--bg2)"
           }}>
-            {["problem", "output", "results"].map(tab => (
+            {["problem", "run", "submit"].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -318,10 +306,10 @@ export default function Coding() {
                 }}
               >
                 {tab === "problem"  ? "📋 Problem"  : ""}
-                {tab === "output"   ? "▶️ Output"    : ""}
-                {tab === "results"  ? "🧪 Results"  : ""}
+                {tab === "run"      ? "▶️ Run"       : ""}
+                {tab === "submit"   ? "🧪 Submit"   : ""}
                 {/* Badge showing result count */}
-                {tab === "results" && results && (
+                {tab === "submit" && results && (
                   <span style={{
                     position:    "absolute",
                     top:         "4px",
@@ -358,15 +346,40 @@ export default function Coding() {
                   {problem.description}
                 </p>
 
+                {/* Function Signature — LeetCode style */}
+                {problem.function_signature?.[language] && (
+                  <div style={{
+                    background:   "rgba(139,92,246,.06)",
+                    border:       "1px solid rgba(139,92,246,.25)",
+                    borderRadius: "10px",
+                    padding:      "14px",
+                    marginBottom: "20px"
+                  }}>
+                    <div style={{
+                      fontSize: ".75rem", color: "var(--t2)",
+                      marginBottom: "8px", fontWeight: 600,
+                      textTransform: "uppercase", letterSpacing: ".5px"
+                    }}>
+                      Function Signature
+                    </div>
+                    <pre style={{
+                      margin: 0,
+                      fontFamily: "JetBrains Mono, Fira Code, monospace",
+                      fontSize: ".85rem",
+                      color: "#a78bfa",
+                      whiteSpace: "pre-wrap"
+                    }}>
+                      {problem.function_signature[language]}
+                    </pre>
+                  </div>
+                )}
+
                 {/* Examples */}
                 <h4 style={{ marginBottom: "10px", fontSize: ".9rem", color: "var(--pl)" }}>
                   Examples:
                 </h4>
                 {problem.examples?.map((ex, i) => (
-                  <div key={i} style={{
-                    background:   "rgba(255,255,255,.03)",
-                    border:       "1px solid var(--bdr)",
-                    borderRadius: "10px",
+                  <div key={i} className="glass" style={{
                     padding:      "14px",
                     marginBottom: "10px",
                     fontSize:     ".85rem"
@@ -399,6 +412,63 @@ export default function Coding() {
                   ))}
                 </ul>
 
+                {/* Time & Space Complexity */}
+                {(problem.time_complexity || problem.space_complexity) && (
+                  <div style={{
+                    marginTop:     "16px",
+                    padding:       "12px 14px",
+                    background:    "rgba(99,102,241,.06)",
+                    border:        "1px solid rgba(99,102,241,.2)",
+                    borderRadius:  "10px",
+                    display:       "flex",
+                    flexDirection: "column",
+                    gap:           "8px"
+                  }}>
+                    <div style={{
+                      fontSize:     ".75rem",
+                      color:        "var(--t2)",
+                      fontWeight:   600,
+                      textTransform: "uppercase",
+                      letterSpacing: ".5px",
+                      marginBottom: "2px"
+                    }}>
+                      Complexity Analysis
+                    </div>
+                    {problem.time_complexity && (
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                        <span style={{
+                          fontSize:     ".78rem",
+                          fontWeight:   700,
+                          color:        "#818cf8",
+                          flexShrink:   0,
+                          minWidth:     "100px"
+                        }}>
+                          Time:
+                        </span>
+                        <span style={{ fontSize: ".82rem", color: "var(--t1)", lineHeight: 1.5 }}>
+                          {problem.time_complexity}
+                        </span>
+                      </div>
+                    )}
+                    {problem.space_complexity && (
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                        <span style={{
+                          fontSize:     ".78rem",
+                          fontWeight:   700,
+                          color:        "#818cf8",
+                          flexShrink:   0,
+                          minWidth:     "100px"
+                        }}>
+                          Space:
+                        </span>
+                        <span style={{ fontSize: ".82rem", color: "var(--t1)", lineHeight: 1.5 }}>
+                          {problem.space_complexity}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Hints */}
                 {problem.hints?.length > 0 && (
                   <details style={{ marginTop: "16px" }}>
@@ -422,10 +492,10 @@ export default function Coding() {
               </div>
             )}
 
-            {/* ── Output Tab ── */}
-            {activeTab === "output" && (
+            {/* ── Run Tab (Example Test Cases) ── */}
+            {activeTab === "run" && (
               <div>
-                <h3 style={{ marginBottom: "14px", fontSize: ".95rem" }}>▶️ Code Output</h3>
+                <h3 style={{ marginBottom: "14px", fontSize: ".95rem" }}>▶️ Example Test Cases</h3>
                 {running ? (
                   <div style={{
                     display:       "flex",
@@ -437,179 +507,152 @@ export default function Coding() {
                     color:         "var(--t2)"
                   }}>
                     <div className="spinner" style={{ width: 36, height: 36 }}/>
-                    <div style={{ fontSize: ".9rem", fontWeight: 600 }}>Executing your code...</div>
+                    <div style={{ fontSize: ".9rem", fontWeight: 600 }}>Running example cases...</div>
                     <div style={{ fontSize: ".78rem", color: "var(--t2)", opacity: 0.7 }}>
-                      This may take a few seconds
+                      Testing against visible examples
                     </div>
                   </div>
-                ) : output ? (
+                ) : runResults ? (
                   <div>
-                    {/* Status Badge */}
+                    {/* Overall badge */}
                     <div style={{
                       display:      "inline-flex",
                       alignItems:   "center",
                       gap:          "6px",
-                      background:   getStatusStyle(output.status).bg,
-                      border:       `1px solid ${getStatusStyle(output.status).border}`,
-                      color:        getStatusStyle(output.status).color,
+                      background:   runResults.all_passed ? "rgba(16,185,129,.12)" : "rgba(239,68,68,.12)",
+                      border:       `1px solid ${runResults.all_passed ? "#10b981" : "#ef4444"}`,
+                      color:        runResults.all_passed ? "#10b981" : "#ef4444",
                       borderRadius: "8px",
                       padding:      "5px 14px",
                       fontSize:     ".8rem",
                       fontWeight:   700,
                       marginBottom: "16px"
                     }}>
-                      {output.status === "Success" ? "✅" : output.status === "Compilation Error" ? "🔧" : output.status === "Time Limit Exceeded" ? "⏱️" : "❌"}
-                      {output.status}
+                      {runResults.all_passed ? "✅" : "❌"}
+                      {runResults.passed}/{runResults.total} Example Cases Passed
                     </div>
 
-                    {/* Compilation Error — Compiler Logs */}
-                    {output.compile_stderr && (
-                      <div style={{ marginBottom: "14px" }}>
-                        <div style={{
-                          fontSize:     ".8rem",
-                          fontWeight:   700,
-                          color:        "#ef4444",
-                          marginBottom: "6px",
-                          display:      "flex",
-                          alignItems:   "center",
-                          gap:          "6px"
+                    {/* Individual results */}
+                    {runResults.results?.map((tc, i) => {
+                      const tcStyle = getStatusStyle(tc.status)
+                      return (
+                        <div key={i} style={{
+                          padding:       "14px",
+                          borderRadius:  "10px",
+                          background:    tcStyle.bg,
+                          border:        `1px solid ${tcStyle.border}33`,
+                          marginBottom:  "10px"
                         }}>
-                          🔧 Compiler Error
-                        </div>
-                        <pre style={{
-                          background:   "rgba(239,68,68,.06)",
-                          border:       "1px solid rgba(239,68,68,.3)",
-                          borderRadius: "8px",
-                          padding:      "12px",
-                          fontSize:     ".82rem",
-                          color:        "#fca5a5",
-                          overflowX:    "auto",
-                          whiteSpace:   "pre-wrap",
-                          lineHeight:   1.6,
-                          maxHeight:    "300px",
-                          overflow:     "auto"
-                        }}>
-                          {output.compile_stderr}
-                        </pre>
-                      </div>
-                    )}
+                          <div style={{
+                            display:        "flex",
+                            justifyContent: "space-between",
+                            alignItems:     "center",
+                            marginBottom:   "10px"
+                          }}>
+                            <span style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--t1)" }}>
+                              Example {tc.test_case}
+                            </span>
+                            <span style={{
+                              color:      tcStyle.color,
+                              fontWeight: 700,
+                              fontSize:   ".78rem",
+                              background: `${tcStyle.border}15`,
+                              padding:    "3px 10px",
+                              borderRadius: "20px",
+                              border:     `1px solid ${tcStyle.border}44`
+                            }}>
+                              {tc.passed ? "✅ PASSED" : `❌ ${tc.status}`}
+                            </span>
+                          </div>
 
-                    {/* Stdout — Program Output */}
-                    {output.stdout ? (
-                      <div style={{ marginBottom: "14px" }}>
-                        <div style={{
-                          fontSize:     ".8rem",
-                          fontWeight:   700,
-                          color:        "#10b981",
-                          marginBottom: "6px",
-                          display:      "flex",
-                          alignItems:   "center",
-                          gap:          "6px"
-                        }}>
-                          📤 Output
-                        </div>
-                        <pre style={{
-                          background:   "rgba(0,0,0,.3)",
-                          border:       "1px solid var(--bdr)",
-                          borderRadius: "8px",
-                          padding:      "12px",
-                          fontSize:     ".85rem",
-                          color:        "#10b981",
-                          overflowX:    "auto",
-                          whiteSpace:   "pre-wrap",
-                          lineHeight:   1.6,
-                          maxHeight:    "300px",
-                          overflow:     "auto"
-                        }}>
-                          {output.stdout}
-                        </pre>
-                      </div>
-                    ) : (
-                      !output.compile_stderr && (
-                        <div style={{
-                          padding:       "12px 16px",
-                          background:    "rgba(255,255,255,.03)",
-                          border:        "1px solid var(--bdr)",
-                          borderRadius:  "8px",
-                          fontSize:      ".85rem",
-                          color:         "var(--t2)",
-                          marginBottom:  "14px"
-                        }}>
-                          Program produced no output.
+                          {tc.input && (
+                            <div style={{ marginBottom: "6px" }}>
+                              <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                                Input:
+                              </div>
+                              <code style={{
+                                display: "block", background: "rgba(0,0,0,.2)",
+                                padding: "8px 10px", borderRadius: "6px",
+                                fontSize: ".8rem", color: "#93c5fd",
+                                whiteSpace: "pre-wrap", wordBreak: "break-all"
+                              }}>
+                                {tc.input || "(empty)"}
+                              </code>
+                            </div>
+                          )}
+
+                          <div style={{ marginBottom: "6px" }}>
+                            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                              Expected:
+                            </div>
+                            <code style={{
+                              display: "block", background: "rgba(0,0,0,.2)",
+                              padding: "8px 10px", borderRadius: "6px",
+                              fontSize: ".8rem", color: "#10b981",
+                              whiteSpace: "pre-wrap", wordBreak: "break-all"
+                            }}>
+                              {tc.expected || "(empty)"}
+                            </code>
+                          </div>
+
+                          <div style={{ marginBottom: "6px" }}>
+                            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                              Your Output:
+                            </div>
+                            <code style={{
+                              display: "block", background: "rgba(0,0,0,.2)",
+                              padding: "8px 10px", borderRadius: "6px",
+                              fontSize: ".8rem",
+                              color: tc.passed ? "#10b981" : "#ef4444",
+                              whiteSpace: "pre-wrap", wordBreak: "break-all"
+                            }}>
+                              {tc.got || "(no output)"}
+                            </code>
+                          </div>
+
+                          {tc.error_message && (
+                            <div style={{ marginTop: "8px" }}>
+                              <div style={{ fontSize: ".75rem", color: "#ef4444", marginBottom: "3px", fontWeight: 600 }}>
+                                Error:
+                              </div>
+                              <pre style={{
+                                background: "rgba(239,68,68,.06)",
+                                border: "1px solid rgba(239,68,68,.25)",
+                                borderRadius: "6px", padding: "8px 10px",
+                                fontSize: ".78rem", color: "#fca5a5",
+                                whiteSpace: "pre-wrap", wordBreak: "break-word",
+                                maxHeight: "150px", overflow: "auto"
+                              }}>
+                                {tc.error_message}
+                              </pre>
+                            </div>
+                          )}
                         </div>
                       )
-                    )}
-
-                    {/* Runtime Error — Runtime Logs */}
-                    {output.run_stderr && !output.compile_stderr && (
-                      <div style={{ marginBottom: "14px" }}>
-                        <div style={{
-                          fontSize:     ".8rem",
-                          fontWeight:   700,
-                          color:        "#ef4444",
-                          marginBottom: "6px",
-                          display:      "flex",
-                          alignItems:   "center",
-                          gap:          "6px"
-                        }}>
-                          ❌ Runtime Error
-                        </div>
-                        <pre style={{
-                          background:   "rgba(239,68,68,.06)",
-                          border:       "1px solid rgba(239,68,68,.3)",
-                          borderRadius: "8px",
-                          padding:      "12px",
-                          fontSize:     ".82rem",
-                          color:        "#fca5a5",
-                          overflowX:    "auto",
-                          whiteSpace:   "pre-wrap",
-                          lineHeight:   1.6,
-                          maxHeight:    "300px",
-                          overflow:     "auto"
-                        }}>
-                          {output.run_stderr}
-                        </pre>
-                      </div>
-                    )}
-
-                    {/* Exit Code */}
-                    <div style={{
-                      fontSize:     ".75rem",
-                      color:        "var(--t2)",
-                      opacity:      0.6,
-                      borderTop:    "1px solid var(--bdr)",
-                      paddingTop:   "10px",
-                      marginTop:    "4px"
-                    }}>
-                      Exit Code: {output.exit_code}
-                    </div>
+                    })}
                   </div>
                 ) : (
                   <div style={{
-                    display:        "flex",
-                    flexDirection:  "column",
-                    alignItems:     "center",
-                    justifyContent: "center",
-                    padding:        "40px 0",
-                    color:          "var(--t2)",
-                    gap:            "8px"
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                    padding: "40px 0", color: "var(--t2)", gap: "8px"
                   }}>
                     <span style={{ fontSize: "2rem", opacity: 0.3 }}>▶️</span>
                     <p style={{ fontSize: ".9rem" }}>
-                      Click <strong>"▶️ Run"</strong> to execute your code.
+                      Click <strong>"▶️ Run"</strong> to test against example cases.
                     </p>
                     <p style={{ fontSize: ".78rem", opacity: 0.6 }}>
-                      Output, compiler logs and runtime errors will appear here.
+                      Results for each visible example will appear here.
                     </p>
                   </div>
                 )}
               </div>
             )}
 
-            {/* ── Results Tab ── */}
-            {activeTab === "results" && (
+            {/* ── Submit Tab (Hidden Test Cases) ── */}
+            {activeTab === "submit" && (
               <div>
-                <h3 style={{ marginBottom: "14px", fontSize: ".95rem" }}>🧪 Test Results</h3>
+                <h3 style={{ marginBottom: "14px", fontSize: ".95rem" }}>🧪 Hidden Test Cases</h3>
                 {submitting ? (
                   <div style={{
                     display:       "flex",
@@ -805,7 +848,7 @@ export default function Coding() {
                   }}>
                     <span style={{ fontSize: "2rem", opacity: 0.3 }}>🧪</span>
                     <p style={{ fontSize: ".9rem" }}>
-                      Click <strong>"🚀 Submit"</strong> to run against all test cases.
+                      Click <strong>"🚀 Submit"</strong> to run against hidden test cases.
                     </p>
                     <p style={{ fontSize: ".78rem", opacity: 0.6 }}>
                       Detailed results with input, expected &amp; actual output will appear here.
@@ -839,9 +882,9 @@ export default function Coding() {
                                   ? "1px solid var(--p)"
                                   : "1px solid var(--bdr)",
                   background:   language === lang.id
-                                  ? "rgba(139,92,246,.2)"
-                                  : "transparent",
-                  color:        language === lang.id ? "var(--pl)" : "var(--t2)",
+                                  ? "var(--grad)"
+                                  : "var(--card)",
+                  color:        language === lang.id ? "#fff" : "var(--t2)",
                   cursor:       "pointer",
                   fontSize:     ".82rem",
                   fontWeight:   600,
