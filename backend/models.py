@@ -48,11 +48,12 @@ _client = _build_client()
 db      = _client["mockmind"]
 
 # ── Collections ──
-users_col    = db["users"]
-sessions_col = db["interview_sessions"]
-qa_col       = db["interview_qa"]
-coding_col   = db["coding_sessions"]
-stats_col    = db["user_stats"]
+users_col      = db["users"]
+sessions_col   = db["interview_sessions"]
+qa_col         = db["interview_qa"]
+coding_col     = db["coding_sessions"]
+stats_col      = db["user_stats"]
+password_resets_col = db["password_resets"]
 
 
 def init_db():

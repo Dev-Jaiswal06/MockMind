@@ -37,7 +37,11 @@ const features = [
 
 export default function Landing() {
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", position: "relative", overflow: "hidden" }}>
+
+      {/* Ambient gradient orbs */}
+      <div className="orb orb-1"/>
+      <div className="orb orb-2"/>
 
       {/* ── Navbar ── */}
       <nav style={{
@@ -50,7 +54,7 @@ export default function Landing() {
         position:        "sticky",
         top:             0,
         zIndex:          100,
-        background:      "rgba(8,8,18,.85)"
+        background:      "var(--card)"
       }}>
         <div style={{ fontSize: "1.6rem", fontWeight: 900 }}>
           <span className="gt">Mock</span>
@@ -268,7 +272,7 @@ export default function Landing() {
               <div key={i} style={{
                 padding:      "18px",
                 borderRadius: "12px",
-                background:   "rgba(255,255,255,.03)",
+                background:   "var(--card2)",
                 border:       "1px solid var(--bdr)"
               }}>
                 <div style={{ fontSize: "1.6rem", marginBottom: "6px" }}>{icon}</div>
@@ -296,14 +300,37 @@ export default function Landing() {
 
       {/* ── Footer ── */}
       <footer style={{
-        padding:    "24px 48px",
+        padding:    "32px 48px",
         borderTop:  "1px solid var(--bdr)",
-        textAlign:  "center",
-        color:      "var(--t3)",
-        fontSize:   ".82rem"
+        background: "var(--card)",
+        position:   "relative",
+        zIndex:     1
       }}>
-        <span className="gt" style={{ fontWeight: 700 }}>MockMind</span>
-        {" "}— AI Mock Interview System | Final Year Project | {new Date().getFullYear()}
+        <div style={{
+          maxWidth:  "1200px",
+          margin:    "0 auto",
+          display:   "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap:  "wrap",
+          gap:       "16px"
+        }}>
+          <div>
+            <span className="gt" style={{ fontWeight: 800, fontSize: "1.1rem" }}>MockMind</span>
+            <p style={{ color: "var(--t3)", fontSize: ".8rem", marginTop: "4px" }}>
+              AI-Powered Mock Interview System
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
+            <span style={{ color: "var(--t3)", fontSize: ".8rem" }}>
+              Final Year Project — {new Date().getFullYear()}
+            </span>
+            <span style={{ color: "var(--t3)", fontSize: ".8rem" }}>|</span>
+            <span style={{ color: "var(--t3)", fontSize: ".8rem" }}>
+              Built with 🧠 Gemini AI
+            </span>
+          </div>
+        </div>
       </footer>
     </div>
   )

@@ -234,7 +234,7 @@ export default function Reports() {
         display:      "flex",
         gap:          "4px",
         marginBottom: "24px",
-        background:   "rgba(255,255,255,.03)",
+        background:   "var(--card2)",
         borderRadius: "12px",
         padding:      "5px",
         border:       "1px solid var(--bdr)",
@@ -279,14 +279,15 @@ export default function Reports() {
             {lineData.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={lineData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.05)"/>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--bdr)"/>
                   <XAxis dataKey="session" stroke="var(--t3)" fontSize={12}/>
                   <YAxis stroke="var(--t3)" fontSize={12} domain={[0, 100]}/>
                   <Tooltip
                     contentStyle={{
-                      background:   "#1a1a2e",
+                      background:   "var(--bg2)",
                       border:       "1px solid var(--bdr)",
-                      borderRadius: "10px"
+                      borderRadius: "10px",
+                      boxShadow:    "var(--shadow-lg)"
                     }}
                     formatter={(value) => `${value}%`}
                   />
@@ -315,14 +316,15 @@ export default function Reports() {
               </h3>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={barData} barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.05)"/>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--bdr)"/>
                   <XAxis dataKey="role" stroke="var(--t3)" fontSize={11}/>
                   <YAxis stroke="var(--t3)" fontSize={11} domain={[0, 100]}/>
                   <Tooltip
                     contentStyle={{
-                      background:   "#1a1a2e",
+                      background:   "var(--bg2)",
                       border:       "1px solid var(--bdr)",
-                      borderRadius: "10px"
+                      borderRadius: "10px",
+                      boxShadow:    "var(--shadow-lg)"
                     }}
                     formatter={(value) => `${value}%`}
                   />
@@ -356,7 +358,7 @@ export default function Reports() {
               gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
               gap:                 "12px",
               padding:             "10px 14px",
-              background:          "rgba(255,255,255,.04)",
+              background:          "var(--bg2)",
               borderRadius:        "8px",
               marginBottom:        "8px",
               fontSize:            ".78rem",
@@ -382,7 +384,7 @@ export default function Reports() {
                   gap:                 "12px",
                   padding:             "12px 14px",
                   borderRadius:        "10px",
-                  background:          "rgba(255,255,255,.02)",
+                  background:          "var(--card2)",
                   marginBottom:        "8px",
                   border:              "1px solid var(--bdr)",
                   alignItems:          "center"

@@ -153,20 +153,21 @@ def _python_driver(user_code, func_name):
 if __name__ == "__main__":
     try:
         _stdin = sys.stdin.read().strip()
-        if not _stdin:
-            sys.exit(0)
-        _lines = _stdin.split("\\n")
-        _args = []
-        for _line in _lines:
-            _line = _line.strip()
-            if not _line:
-                continue
-            try:
-                _val = json.loads(_line.replace("'", '"'))
-            except (json.JSONDecodeError, ValueError):
-                _val = _line.strip("'").strip('"')
-            _args.append(_val)
-        _result = {func_name}(*_args)
+        if _stdin:
+            _lines = _stdin.split("\\n")
+            _args = []
+            for _line in _lines:
+                _line = _line.strip()
+                if not _line:
+                    continue
+                try:
+                    _val = json.loads(_line.replace("'", '"'))
+                except (json.JSONDecodeError, ValueError):
+                    _val = _line.strip("'").strip('"')
+                _args.append(_val)
+            _result = {func_name}(*_args)
+        else:
+            _result = {func_name}()
         if _result is None:
             sys.exit(0)
         print(json.dumps(_result, separators=(",", ":"), ensure_ascii=False))

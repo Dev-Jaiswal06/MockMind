@@ -54,8 +54,13 @@ export default function Signup() {
       justifyContent: "center",
       background:     "var(--bg)",
       padding:        "20px",
-      gap:            "50px"
+      gap:            "50px",
+      position:       "relative",
+      overflow:        "hidden"
     }}>
+      {/* Ambient gradient orbs */}
+      <div className="orb orb-1"/>
+      <div className="orb orb-2"/>
       {/* Robot — desktop only */}
       <motion.div
         className="hm"
@@ -78,6 +83,11 @@ export default function Signup() {
         animate={{ opacity:1, y:0 }}
       >
         <div style={{ textAlign:"center", marginBottom:"24px" }}>
+          <div className="mm" style={{ fontSize: "2rem", marginBottom: "8px" }}>
+            <span className="gt" style={{ fontWeight: 900 }}>Mock</span>
+            <span style={{ fontWeight: 900 }}>Mind</span>
+            <span style={{ marginLeft: "4px" }}>🧠</span>
+          </div>
           <h1 style={{ fontSize:"1.8rem", fontWeight:800, marginBottom:"6px" }}>
             Create Account
           </h1>

@@ -241,7 +241,7 @@ GET	/api/interview/session/<id>	Get session details
 Coding Endpoints
 Method	Endpoint	Description
 GET	/api/coding/problem	Get AI-generated problem
-POST	/api/coding/run	Run code (Piston API)
+POST	/api/coding/run-cases	Run code against example test cases
 POST	/api/coding/submit	Submit against test cases
 Reports Endpoints
 Method	Endpoint	Description

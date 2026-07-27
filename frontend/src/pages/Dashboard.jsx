@@ -30,8 +30,14 @@ export default function Dashboard() {
   }))
 
   if (load) return (
-    <div style={{ display:"flex", justifyContent:"center", alignItems:"center", height:"100vh" }}>
-      <div className="spinner" style={{ width:50, height:50 }}/>
+    <div style={{ padding:"28px", maxWidth:"1200px", margin:"0 auto" }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:"16px", marginBottom:"28px" }}>
+        {[1,2,3,4].map(i => (
+          <div key={i} className="skeleton" style={{ height:"120px", borderRadius:"16px" }}/>
+        ))}
+      </div>
+      <div className="skeleton" style={{ height:"280px", borderRadius:"16px", marginBottom:"20px" }}/>
+      <div className="skeleton" style={{ height:"200px", borderRadius:"16px" }}/>
     </div>
   )
 
@@ -118,7 +124,13 @@ export default function Dashboard() {
             transition={{ delay: i * .1 }}
             whileHover={{ y:-3 }}
           >
-            <div style={{ fontSize:"1.8rem", marginBottom:"6px" }}>{c.icon}</div>
+            <div style={{
+              width:"44px",height:"44px",borderRadius:"12px",
+              background:`${c.color}18`,
+              border:`1px solid ${c.color}33`,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:"1.3rem",marginBottom:"10px"
+            }}>{c.icon}</div>
             <div style={{ fontSize:"1.7rem", fontWeight:800, color:c.color }}>{c.value}</div>
             <div style={{ fontSize:".8rem", color:"var(--t2)", marginTop:"3px" }}>{c.label}</div>
           </motion.div>
@@ -186,7 +198,7 @@ export default function Dashboard() {
           </h3>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.05)"/>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--bdr)"/>
               <XAxis dataKey="session" stroke="var(--t3)" fontSize={11}/>
               <YAxis stroke="var(--t3)" fontSize={11} domain={[0, 100]}/>
               <Tooltip contentStyle={{
@@ -225,7 +237,7 @@ export default function Dashboard() {
               alignItems:     "center",
               padding:        "11px",
               borderRadius:   "10px",
-              background:     "rgba(255,255,255,.02)",
+              background:     "var(--card2)",
               marginBottom:   "9px",
               border:         "1px solid var(--bdr)"
             }}>

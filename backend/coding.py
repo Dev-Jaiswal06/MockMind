@@ -5,7 +5,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import coding_col, update_user_stats
 from ai_engine import generate_coding_problem
 from code_runner import run_with_piston
-from driver_code import wrap_with_driver, wrap_with_driver_for_run, normalize_output
+from driver_code import wrap_with_driver, normalize_output
 from datetime import datetime
 
 logger = logging.getLogger("coding")
@@ -29,42 +29,145 @@ def health_check():
 @coding_bp.route("/api/coding/problem", methods=["GET"])
 @jwt_required()
 def get_problem():
-    role = request.args.get("role",       "Full Stack Developer")
     diff = request.args.get("difficulty", "medium")
-    return jsonify({"problem": generate_coding_problem(role, diff)})
+    return jsonify({"problem": generate_coding_problem(diff)})
 
 
-@coding_bp.route("/api/coding/run", methods=["POST"])
+@coding_bp.route("/api/coding/run-cases", methods=["POST"])
 @jwt_required()
-def run_code():
-    d     = request.get_json()
-    code  = d.get("code", "")
-    lang  = d.get("language", "python")
-    stdin = d.get("stdin", "")
+def run_cases():
+    logger.info("=== /api/coding/run-cases ===")
+    try:
+        d    = request.get_json(force=True)
+        code = d.get("code", "")
+        lang = d.get("language", "python")
+        tcs  = d.get("test_cases", [])
 
-    logger.info(f"=== /api/coding/run ===")
-    logger.info(f"Language: {lang}")
-    logger.info(f"Code ({len(code)} chars): {repr(code[:300])}")
-    logger.info(f"Stdin: {repr(stdin[:200])}")
+        logger.info(f"Lang: {lang}, Code ({len(code)} chars): {repr(code[:200])}")
+        logger.info(f"Test cases: {len(tcs)}")
 
-    if not code.strip():
-        logger.warning("Empty code submitted!")
+        if not code.strip():
+            logger.warning("Empty code!")
+            return jsonify({
+                "results": [], "passed": 0, "total": 0,
+                "all_passed": False,
+                "error": "No code provided.",
+            })
+
+        if not tcs:
+            logger.warning("No test cases provided!")
+            return jsonify({
+                "results": [], "passed": 0, "total": 0,
+                "all_passed": False,
+                "error": "No test cases to run.",
+            })
+
+        results, passed = [], 0
+        compile_error = None
+
+        for i, tc in enumerate(tcs):
+            logger.info(f"\n--- Run Test Case {i+1}/{len(tcs)} ---")
+
+            if compile_error:
+                results.append({
+                    "test_case": i + 1, "input": tc.get("input", ""),
+                    "expected": tc.get("expected", "").strip(), "got": "",
+                    "passed": False, "status": "Compilation Error",
+                    "error_message": compile_error,
+                })
+                continue
+
+            raw_input    = tc.get("input", "")
+            expected_raw = tc.get("expected", "")
+
+            logger.info(f"Input:    {repr(raw_input[:200])}")
+            logger.info(f"Expected: {repr(expected_raw[:200])}")
+
+            complete_code = wrap_with_driver(code, lang, raw_input)
+            logger.info(f"Wrapped code ({len(complete_code)} chars): {repr(complete_code[:300])}")
+
+            r = run_with_piston(complete_code, lang, raw_input)
+
+            stdout_raw          = r.get("stdout", "")
+            got_normalized      = normalize_output(stdout_raw)
+            expected_normalized = normalize_output(expected_raw)
+
+            logger.info(f"Result: status={r.get('status')}, exit={r.get('exit_code')}")
+            logger.info(f"stdout raw:    {repr(stdout_raw[:200])}")
+            logger.info(f"got normalized:{repr(got_normalized[:200])}")
+            logger.info(f"expected norm: {repr(expected_normalized[:200])}")
+
+            if r.get("status") == "Compilation Error":
+                compile_error = r.get("stderr", "") or r.get("compile_stderr", "Compilation error")
+                logger.info(f"COMPILATION ERROR: {compile_error[:200]}")
+                results.append({
+                    "test_case": i + 1, "input": raw_input,
+                    "expected": expected_normalized, "got": got_normalized,
+                    "passed": False, "status": "Compilation Error",
+                    "error_message": compile_error,
+                })
+                continue
+
+            if r.get("status") == "Error":
+                error_msg = r.get("stderr", "") or "Execution engine error"
+                logger.info(f"ENGINE ERROR: {error_msg[:200]}")
+                results.append({
+                    "test_case": i + 1, "input": raw_input,
+                    "expected": expected_normalized, "got": got_normalized,
+                    "passed": False, "status": "Runtime Error",
+                    "error_message": error_msg,
+                })
+                continue
+
+            if r.get("status") == "Time Limit Exceeded":
+                tc_status = "Time Limit Exceeded"
+                error_msg = r.get("stderr", "")
+            elif r.get("exit_code", 0) != 0:
+                tc_status = "Runtime Error"
+                error_msg = r.get("stderr", "") or r.get("run_stderr", "")
+            elif expected_normalized and got_normalized == expected_normalized:
+                tc_status = "Passed"
+                error_msg = ""
+            elif expected_normalized and got_normalized != expected_normalized:
+                tc_status = "Wrong Answer"
+                error_msg = ""
+            else:
+                if got_normalized:
+                    tc_status = "Passed"
+                    error_msg = ""
+                else:
+                    tc_status = "No Output"
+                    error_msg = "Function did not produce any output."
+
+            ok = (got_normalized == expected_normalized) and bool(expected_normalized)
+            if ok:
+                passed += 1
+
+            logger.info(f"→ {tc_status}" + (" ✓" if ok else " ✗"))
+
+            results.append({
+                "test_case": i + 1, "input": raw_input,
+                "expected": expected_normalized, "got": got_normalized,
+                "passed": ok, "status": tc_status, "error_message": error_msg,
+            })
+
+        logger.info(f"\n=== RUN RESULT: {passed}/{len(tcs)} passed ===")
         return jsonify({
-            "stdout": "", "stderr": "No code provided.",
-            "exit_code": 1, "status": "Error",
-            "compile_stderr": "", "run_stderr": "No code provided.",
-            "compile_code": 0,
+            "results":    results,
+            "passed":     passed,
+            "total":      len(tcs),
+            "all_passed": passed == len(tcs),
         })
 
-    complete_code = wrap_with_driver_for_run(code, lang)
-    logger.info(f"Wrapped ({len(complete_code)} chars): {repr(complete_code[:500])}")
-
-    result = run_with_piston(complete_code, lang, stdin)
-
-    logger.info(f"Run result: status={result.get('status')}, "
-                f"exit={result.get('exit_code')}, "
-                f"stdout={repr(result.get('stdout','')[:200])}")
-    return jsonify(result)
+    except Exception as e:
+        logger.error(f"run_cases FAILED: {e}", exc_info=True)
+        return jsonify({
+            "results": [],
+            "passed":  0,
+            "total":   0,
+            "all_passed": False,
+            "error":   f"Server error during execution: {str(e)}",
+        }), 500
 
 
 @coding_bp.route("/api/coding/submit", methods=["POST"])

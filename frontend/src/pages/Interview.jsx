@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence }      from "framer-motion"
 import API                              from "../utils/api"
 import toast                            from "react-hot-toast"
@@ -94,6 +94,7 @@ export default function Interview() {
   const [finalResult,  setFinalResult] = useState(null)
   const [allQA,        setAllQA]       = useState([])
   const [showReview,   setShowReview]  = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
 
   // ── Timer ref ──
   const timerRef = useRef(null)
@@ -675,7 +676,7 @@ export default function Interview() {
             alignItems:   "center",
             gap:          "6px",
             padding:      "6px 14px",
-            background:   "rgba(255,255,255,.05)",
+            background:   "var(--card2)",
             borderRadius: "20px",
             fontSize:     ".85rem",
             fontWeight:   600
@@ -692,11 +693,7 @@ export default function Interview() {
 
           {/* End button */}
           <button
-            onClick={() => {
-              if (window.confirm("End interview? Progress will be saved.")) {
-                completeInterview(allEvals)
-              }
-            }}
+            onClick={() => setShowConfirmModal(true)}
             style={{
               background:   "rgba(239,68,68,.1)",
               border:       "1px solid rgba(239,68,68,.3)",
@@ -727,7 +724,7 @@ export default function Interview() {
         </div>
         <div style={{
           height:       "6px",
-          background:   "rgba(255,255,255,.08)",
+          background:   "var(--bg3)",
           borderRadius: "10px",
           overflow:     "hidden"
         }}>
@@ -887,7 +884,7 @@ export default function Interview() {
             rows={6}
             style={{
               width:        "100%",
-              background:   "rgba(255,255,255,.05)",
+              background:   "var(--card2)",
               border:       "1px solid rgba(255,255,255,.1)",
               borderRadius: "12px",
               padding:      "16px",
@@ -1036,6 +1033,61 @@ export default function Interview() {
           </motion.div>
         </AnimatePresence>
       )}
+
+      {/* ── End Interview Confirm Modal ── */}
+      <AnimatePresence>
+        {showConfirmModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowConfirmModal(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 1000,
+              background: "rgba(0,0,0,.5)",
+              backdropFilter: "blur(4px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "20px"
+            }}
+          >
+            <motion.div
+              className="glass"
+              initial={{ scale: .9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: .9, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              style={{ padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}
+            >
+              <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>⚠️</div>
+              <h3 style={{ fontSize: "1.15rem", fontWeight: 700, marginBottom: "8px" }}>
+                End Interview?
+              </h3>
+              <p style={{ color: "var(--t2)", fontSize: ".88rem", marginBottom: "24px" }}>
+                Progress will be saved. You can view results after ending.
+              </p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  className="btn btns"
+                  style={{ flex: 1, padding: "11px" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowConfirmModal(false); completeInterview(allEvals) }}
+                  className="btn"
+                  style={{
+                    flex: 1, padding: "11px",
+                    background: "var(--err)", color: "#fff", fontWeight: 700
+                  }}
+                >
+                  End Now
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 

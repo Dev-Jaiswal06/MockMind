@@ -1,5 +1,5 @@
 # backend/app.py
-from flask import Flask
+from flask import Flask, request, make_response
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from dotenv import load_dotenv
@@ -59,13 +59,26 @@ app = Flask(__name__)
 app.config["JWT_SECRET_KEY"]           = os.getenv("JWT_SECRET_KEY","dev")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = 86400
 
-CORS(app, origins=["http://localhost:5173", "http://localhost:3000"])
+CORS(app, origins=["http://localhost:5173", "http://localhost:3000"],
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 jwt = JWTManager(app)
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(interview_bp)
 app.register_blueprint(coding_bp)
 app.register_blueprint(reports_bp)
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        resp = make_response()
+        resp.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin", "*")
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
+        resp.headers["Access-Control-Max-Age"] = "3600"
+        return resp, 200
 
 @app.route("/api/health")
 def health():
