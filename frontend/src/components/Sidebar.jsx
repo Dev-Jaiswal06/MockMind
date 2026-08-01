@@ -28,7 +28,7 @@ export default function Sidebar() {
 
   return (
     <motion.div
-      animate={{ width: collapsed ? 70 : 220 }}
+      animate={{ width: collapsed ? 70 : 330 }}
       transition={{ duration: .3, ease: "easeInOut" }}
       style={{
         height:        "100vh",
@@ -106,8 +106,8 @@ export default function Sidebar() {
                 style={{
                   display:      "flex",
                   alignItems:   "center",
-                  gap:          "12px",
-                  padding:      collapsed ? "12px" : "11px 14px",
+                  gap:          "14px",
+                  padding:      collapsed ? "12px" : "14px 18px",
                   borderRadius: "10px",
                   background:   isActive
                                   ? "rgba(139,92,246,.2)"
@@ -120,7 +120,7 @@ export default function Sidebar() {
                   justifyContent: collapsed ? "center" : "flex-start"
                 }}
               >
-                <span style={{ fontSize: "1.2rem", flexShrink: 0 }}>
+                <span style={{ fontSize: "1.6rem", flexShrink: 0 }}>
                   {item.icon}
                 </span>
 
@@ -133,7 +133,7 @@ export default function Sidebar() {
                       style={{
                         color:      isActive ? "var(--pl)" : "var(--t2)",
                         fontWeight: isActive ? 700 : 500,
-                        fontSize:   ".9rem",
+                        fontSize:   "1.2rem",
                         whiteSpace: "nowrap",
                         overflow:   "hidden"
                       }}

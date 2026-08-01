@@ -30,8 +30,8 @@ export default function Signup() {
     setLoading(true)
     try {
       await signup(form.name, form.email, form.password)
-      toast.success("Account created successfully!")
-      navigate("/dashboard")
+      toast.success("Verification code sent! Check your email.")
+      navigate(`/verify-email?email=${encodeURIComponent(form.email)}`)
     } catch (err) {
       toast.error(err.response?.data?.error || "Registration failed. Please try again.")
     } finally {

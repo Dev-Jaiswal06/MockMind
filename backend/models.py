@@ -54,6 +54,7 @@ qa_col         = db["interview_qa"]
 coding_col     = db["coding_sessions"]
 stats_col      = db["user_stats"]
 password_resets_col = db["password_resets"]
+email_verifications_col = db["email_verifications"]
 
 
 def init_db():
@@ -65,7 +66,12 @@ def init_db():
     qa_col.create_index([("user_id", ASCENDING)])
     coding_col.create_index([("user_id", ASCENDING)])
     stats_col.create_index([("user_id", ASCENDING)], unique=True)
-    print("✅ MockMind MongoDB Connected & Ready!")
+    try:
+        email_verifications_col.drop_index("token_1")
+    except Exception:
+        pass
+    email_verifications_col.create_index([("code", ASCENDING)])
+    print("[OK] MockMind MongoDB Connected & Ready!")
 
 
 def update_user_stats(user_id):
