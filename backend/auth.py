@@ -1,10 +1,10 @@
-# backend/auth.py
+﻿# backend/auth.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from models import users_col, stats_col, password_resets_col
+from models import users_col, stats_col, password_resets_col, email_verifications_col
 from datetime import datetime, timedelta
 from bson import ObjectId
-from email_utils import send_reset_email
+from email_utils import send_reset_email, send_verification_email, validate_email_address
 import bcrypt
 import secrets
 import os
@@ -23,15 +23,42 @@ def signup():
         return jsonify({"error": "All fields are required!"}), 400
     if len(password) < 6:
         return jsonify({"error": "Password must be at least 6 characters!"}), 400
-    if users_col.find_one({"email": email}):
-        return jsonify({"error": "Email is already registered!"}), 409
 
-    hashed  = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    existing = users_col.find_one({"email": email})
+    if existing and existing.get("is_email_verified", True):
+        return jsonify({"error": "Email is already registered!"}), 409
+    if not validate_email_address(email):
+        return jsonify({"error": "Please check whether the email address is valid or not."}), 400
+
+    # Purana abandoned unverified account delete karo (email verify nahi hua tha)
+    if existing:
+        users_col.delete_one({"_id": existing["_id"]})
+        stats_col.delete_one({"user_id": str(existing["_id"])})
+        email_verifications_col.delete_many({"email": email})
+
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    code   = f"{secrets.randbelow(1000000):06d}"
+
+    # OTP pehle store karo, email bhejo â€” send fail ho to user kabhi na bane
+    email_verifications_col.insert_one({
+        "email":      email,
+        "code":       code,
+        "created_at": datetime.utcnow().isoformat(),
+        "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat(),
+        "used":       False
+    })
+
+    sent = send_verification_email(email, code)
+    if not sent:
+        email_verifications_col.delete_many({"email": email})
+        return jsonify({"error": "Please check whether the email address is valid or not."}), 400
+
     result  = users_col.insert_one({
-        "name":          name,
-        "email":         email,
-        "password_hash": hashed,
-        "created_at":    datetime.utcnow().isoformat()
+        "name":              name,
+        "email":             email,
+        "password_hash":     hashed,
+        "is_email_verified": False,
+        "created_at":        datetime.utcnow().isoformat()
     })
     user_id = str(result.inserted_id)
 
@@ -49,12 +76,75 @@ def signup():
         upsert=True
     )
 
-    token = create_access_token(identity=user_id)
     return jsonify({
-        "message": f"Welcome {name}! Account created successfully.",
-        "token":   token,
+        "message": f"A verification code has been sent to {email}. Please verify your email to activate your account.",
         "user":    {"id": user_id, "name": name, "email": email}
     }), 201
+
+
+# â”€â”€ VERIFY OTP â”€â”€
+@auth_bp.route("/api/auth/verify-otp", methods=["POST"])
+def verify_otp():
+    data  = request.get_json() or {}
+    email = data.get("email", "").strip().lower()
+    code  = data.get("code",  "").strip()
+
+    if not email or not code:
+        return jsonify({"error": "Email and verification code are required"}), 400
+
+    record = email_verifications_col.find_one({"email": email, "code": code, "used": False})
+    if not record:
+        return jsonify({"error": "Invalid verification code!"}), 400
+
+    expires_at = datetime.fromisoformat(record["expires_at"])
+    if datetime.utcnow() > expires_at:
+        email_verifications_col.delete_one({"_id": record["_id"]})
+        return jsonify({"error": "Verification code has expired. Please resend the code."}), 400
+
+    users_col.update_one(
+        {"email": email},
+        {"$set": {"is_email_verified": True}}
+    )
+    email_verifications_col.update_one(
+        {"_id": record["_id"]},
+        {"$set": {"used": True}}
+    )
+
+    return jsonify({"message": "Email verified successfully! You can now log in."}), 200
+
+
+# â”€â”€ RESEND VERIFICATION CODE â”€â”€
+@auth_bp.route("/api/auth/resend-verification", methods=["POST"])
+def resend_verification():
+    data  = request.get_json() or {}
+    email = data.get("email", "").strip().lower()
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    user = users_col.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "Email not registered!"}), 404
+    if user.get("is_email_verified", True):
+        return jsonify({"error": "Email is already verified!"}), 400
+
+    # Purane codes delete karo is email ke liye
+    email_verifications_col.delete_many({"email": email})
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    email_verifications_col.insert_one({
+        "email":      email,
+        "code":       code,
+        "created_at": datetime.utcnow().isoformat(),
+        "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat(),
+        "used":       False
+    })
+
+    sent = send_verification_email(email, code)
+    if not sent:
+        return jsonify({"error": "Please check whether the email address is valid or not."}), 400
+
+    return jsonify({"message": "A new verification code has been sent. Check your email."}), 200
 
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
@@ -68,6 +158,8 @@ def login():
         return jsonify({"error": "Email not registered!"}), 404
     if not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
         return jsonify({"error": "Incorrect password!"}), 401
+    if not user.get("is_email_verified", True):
+        return jsonify({"error": "Please verify your email before logging in."}), 403
 
     user_id = str(user["_id"])
     token   = create_access_token(identity=user_id)
@@ -97,7 +189,7 @@ def get_me():
     })
 
 
-# ── FORGOT PASSWORD ──
+# â”€â”€ FORGOT PASSWORD â”€â”€
 @auth_bp.route("/api/auth/forgot-password", methods=["POST"])
 def forgot_password():
     data  = request.get_json() or {}
@@ -115,7 +207,7 @@ def forgot_password():
     if recent_count >= 10:
         return jsonify({"error": "Too many requests. Try again later."}), 429
 
-    # Always return same response — email existence na reveal karo
+    # Always return same response â€” email existence na reveal karo
     user = users_col.find_one({"email": email})
     if not user:
         return jsonify({"message": "If that email exists, a reset link has been sent."}), 200
@@ -143,7 +235,7 @@ def forgot_password():
     return jsonify({"message": "If that email exists, a reset link has been sent."}), 200
 
 
-# ── RESET PASSWORD ──
+# â”€â”€ RESET PASSWORD â”€â”€
 @auth_bp.route("/api/auth/reset-password", methods=["POST"])
 def reset_password():
     data         = request.get_json() or {}

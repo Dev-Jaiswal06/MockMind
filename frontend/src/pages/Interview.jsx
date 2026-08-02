@@ -364,7 +364,7 @@ export default function Interview() {
   // SCREEN 1 — SETUP
   // ════════════════════════════════════════
   if (screen === SCREEN.SETUP) return (
-    <div style={{ padding: "28px", maxWidth: "900px", margin: "0 auto" }}>
+    <div style={{ padding: "28px", maxWidth: "1200px", margin: "0 auto" }}>
 
       <motion.div
         initial={{ opacity: 0, y: -15 }}
@@ -396,7 +396,7 @@ export default function Interview() {
               key={type.id}
               onClick={() => setType(type.id)}
               style={{
-                padding:      "16px",
+                padding:      "18px",
                 borderRadius: "12px",
                 border:       selectedType === type.id
                                 ? "2px solid #8b5cf6"
@@ -409,16 +409,16 @@ export default function Interview() {
                 transition:   "all .2s"
               }}
             >
-              <div style={{ fontSize: "1.6rem", marginBottom: "6px" }}>{type.icon}</div>
+              <div style={{ fontSize: "1.9rem", marginBottom: "8px" }}>{type.icon}</div>
               <div style={{
                 fontWeight: 700,
-                fontSize:   ".88rem",
-                marginBottom: "4px",
+                fontSize:   "1rem",
+                marginBottom: "5px",
                 color: selectedType === type.id ? "#a78bfa" : "var(--t1)"
               }}>
                 {type.label}
               </div>
-              <div style={{ fontSize: ".76rem", color: "var(--t2)" }}>
+              <div style={{ fontSize: ".86rem", color: "var(--t2)" }}>
                 {type.desc}
               </div>
             </div>
@@ -449,7 +449,7 @@ export default function Interview() {
                 whileHover={{ y: -3 }}
                 whileTap={{ scale: .97 }}
                 style={{
-                  padding:      "14px",
+                  padding:      "16px",
                   borderRadius: "12px",
                   border:       selectedRole?.id === role.id
                                   ? "2px solid #8b5cf6"
@@ -462,11 +462,11 @@ export default function Interview() {
                   transition:   "all .2s"
                 }}
               >
-                <div style={{ fontSize: "1.8rem", marginBottom: "6px" }}>
+                <div style={{ fontSize: "2.1rem", marginBottom: "8px" }}>
                   {role.icon}
                 </div>
                 <div style={{
-                  fontSize:   ".82rem",
+                  fontSize:   ".95rem",
                   fontWeight: selectedRole?.id === role.id ? 700 : 500,
                   color:      selectedRole?.id === role.id ? "#a78bfa" : "var(--t1)"
                 }}>
@@ -553,7 +553,7 @@ export default function Interview() {
                 key={round.id}
                 onClick={() => setRound(round.id)}
                 style={{
-                  padding:      "14px",
+                  padding:      "16px",
                   borderRadius: "12px",
                   border:       selectedRound === round.id
                                   ? "2px solid #8b5cf6"
@@ -566,16 +566,16 @@ export default function Interview() {
                   transition:   "all .2s"
                 }}
               >
-                <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{round.icon}</div>
+                <div style={{ fontSize: "1.8rem", marginBottom: "8px" }}>{round.icon}</div>
                 <div style={{
                   fontWeight: 700,
-                  fontSize:   ".88rem",
-                  marginBottom: "4px",
+                  fontSize:   "1rem",
+                  marginBottom: "5px",
                   color: selectedRound === round.id ? "#a78bfa" : "var(--t1)"
                 }}>
                   {round.label}
                 </div>
-                <div style={{ fontSize: ".76rem", color: "var(--t2)" }}>
+                <div style={{ fontSize: ".86rem", color: "var(--t2)" }}>
                   {round.desc}
                 </div>
               </div>
@@ -644,7 +644,7 @@ export default function Interview() {
   // SCREEN 2 — INTERVIEW
   // ════════════════════════════════════════
   if (screen === SCREEN.INTERVIEW) return (
-    <div style={{ padding: "28px", maxWidth: "860px", margin: "0 auto" }}>
+    <div style={{ padding: "28px", maxWidth: "1150px", margin: "0 auto" }}>
 
       {/* ── Header ── */}
       <div style={{
@@ -1104,7 +1104,7 @@ export default function Interview() {
                      : "#ef4444"
 
     return (
-      <div style={{ padding: "28px", maxWidth: "860px", margin: "0 auto" }}>
+      <div style={{ padding: "28px", maxWidth: "1150px", margin: "0 auto" }}>
 
         {/* Header */}
         <motion.div

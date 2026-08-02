@@ -30,7 +30,7 @@ export default function Dashboard() {
   }))
 
   if (load) return (
-    <div style={{ padding:"28px", maxWidth:"1200px", margin:"0 auto" }}>
+    <div style={{ padding:"28px", maxWidth:"1400px", margin:"0 auto" }}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:"16px", marginBottom:"28px" }}>
         {[1,2,3,4].map(i => (
           <div key={i} className="skeleton" style={{ height:"120px", borderRadius:"16px" }}/>
@@ -82,7 +82,7 @@ export default function Dashboard() {
   ]
 
   return (
-    <div style={{ padding:"28px", maxWidth:"1200px", margin:"0 auto" }}>
+    <div style={{ padding:"28px", maxWidth:"1400px", margin:"0 auto" }}>
 
       {/* Header */}
       <motion.div
@@ -98,10 +98,10 @@ export default function Dashboard() {
         animate={{ opacity:1, y:0 }}
       >
         <div>
-          <h1 style={{ fontSize:"1.9rem", fontWeight:800 }}>
+          <h1 style={{ fontSize:"2.1rem", fontWeight:800 }}>
             Welcome, <span className="gt">{user?.name}!</span>
           </h1>
-          <p style={{ color:"var(--t2)", marginTop:"4px", fontSize:".9rem" }}>
+          <p style={{ color:"var(--t2)", marginTop:"4px", fontSize:".95rem" }}>
             Ready for your next practice session?
           </p>
         </div>
@@ -118,21 +118,21 @@ export default function Dashboard() {
           <motion.div
             key={i}
             className="glass"
-            style={{ padding: "22px" }}
+            style={{ padding: "26px" }}
             initial={{ opacity:0, y:20 }}
             animate={{ opacity:1, y:0 }}
             transition={{ delay: i * .1 }}
             whileHover={{ y:-3 }}
           >
             <div style={{
-              width:"44px",height:"44px",borderRadius:"12px",
+              width:"52px",height:"52px",borderRadius:"14px",
               background:`${c.color}18`,
               border:`1px solid ${c.color}33`,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:"1.3rem",marginBottom:"10px"
+              fontSize:"1.5rem",marginBottom:"12px"
             }}>{c.icon}</div>
-            <div style={{ fontSize:"1.7rem", fontWeight:800, color:c.color }}>{c.value}</div>
-            <div style={{ fontSize:".8rem", color:"var(--t2)", marginTop:"3px" }}>{c.label}</div>
+            <div style={{ fontSize:"2rem", fontWeight:800, color:c.color }}>{c.value}</div>
+            <div style={{ fontSize:".9rem", color:"var(--t2)", marginTop:"4px" }}>{c.label}</div>
           </motion.div>
         ))}
       </div>
@@ -153,8 +153,8 @@ export default function Dashboard() {
               display:       "flex",
               flexDirection: "column",
               justifyContent: "space-between",
-              minHeight:     "260px",
-              padding:       "28px",
+              minHeight:     "300px",
+              padding:       "32px",
               background:    m.bg,
               border:        `1px solid ${m.bdr}`
             }}
@@ -163,18 +163,18 @@ export default function Dashboard() {
             transition={{ delay: .1 + i * .1 }}
             whileHover={{ y:-5 }}
           >
-            <div style={{ fontSize:"2.8rem", marginBottom:"12px" }}>{m.icon}</div>
-            <h2 style={{ fontSize:"1.3rem", fontWeight:700, marginBottom:"8px" }}>{m.title}</h2>
-            <p style={{ color:"var(--t2)", fontSize:".88rem", marginBottom:"18px", lineHeight:1.6 }}>
+            <div style={{ fontSize:"3.2rem", marginBottom:"14px" }}>{m.icon}</div>
+            <h2 style={{ fontSize:"1.5rem", fontWeight:700, marginBottom:"10px" }}>{m.title}</h2>
+            <p style={{ color:"var(--t2)", fontSize:".95rem", marginBottom:"20px", lineHeight:1.6 }}>
               {m.desc}
             </p>
             <Link to={m.link}>
               <button className="btn" style={{
                 background: m.btn,
                 color:      "#fff",
-                padding:    "11px 0",
+                padding:    "13px 0",
                 width:      "100%",
-                fontSize:   ".9rem",
+                fontSize:   ".95rem",
                 fontWeight: 700
               }}>
                 {m.label} →
@@ -193,7 +193,7 @@ export default function Dashboard() {
           animate={{ opacity:1, y:0 }}
           transition={{ delay:.4 }}
         >
-          <h3 style={{ fontWeight:700, marginBottom:"18px", fontSize:"1rem" }}>
+          <h3 style={{ fontWeight:700, marginBottom:"18px", fontSize:"1.1rem" }}>
             📈 Interview Score History
           </h3>
           <ResponsiveContainer width="100%" height={220}>
@@ -227,7 +227,7 @@ export default function Dashboard() {
           animate={{ opacity:1, y:0 }}
           transition={{ delay:.5 }}
         >
-          <h3 style={{ fontWeight:700, marginBottom:"14px", fontSize:"1rem" }}>
+          <h3 style={{ fontWeight:700, marginBottom:"14px", fontSize:"1.1rem" }}>
             🕒 Recent Interview Sessions
           </h3>
           {data.recent_interviews.map((s, i) => (
@@ -235,15 +235,15 @@ export default function Dashboard() {
               display:        "flex",
               justifyContent: "space-between",
               alignItems:     "center",
-              padding:        "11px",
+              padding:        "14px",
               borderRadius:   "10px",
               background:     "var(--card2)",
               marginBottom:   "9px",
               border:         "1px solid var(--bdr)"
             }}>
               <div>
-                <div style={{ fontWeight:600, fontSize:".9rem" }}>{s.role}</div>
-                <div style={{ fontSize:".75rem", color:"var(--t2)" }}>
+                <div style={{ fontWeight:600, fontSize:".95rem" }}>{s.role}</div>
+                <div style={{ fontSize:".8rem", color:"var(--t2)" }}>
                   {new Date(s.created_at).toLocaleDateString("en-IN", {
                     day:"numeric", month:"short", year:"numeric"
                   })}
@@ -251,7 +251,7 @@ export default function Dashboard() {
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
                 <div style={{
-                  fontSize:   "1.2rem",
+                  fontSize:   "1.35rem",
                   fontWeight: 800,
                   color:      s.percentage >= 70 ? "#10b981"
                             : s.percentage >= 50 ? "#f59e0b"
