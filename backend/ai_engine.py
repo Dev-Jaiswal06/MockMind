@@ -1,32 +1,130 @@
-# backend/ai_engine.py — Google Gemini (All English)
+# backend/ai_engine.py — Gemini / OpenRouter / Grok fallback support
 import os, json, random, re
+import requests
 import google.generativeai as genai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-PRIMARY  = "gemini-2.0-flash"
-FALLBACK = "gemini-1.5-flash"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-1.5-flash").strip()
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini").strip()
+GROK_API_KEY = os.getenv("GROK_API_KEY", "").strip()
+GROK_MODEL = os.getenv("GROK_MODEL", "grok-2").strip()
+DEFAULT_PROVIDER_ORDER = [
+    p.strip().lower()
+    for p in os.getenv("AI_PROVIDER_ORDER", "gemini,openrouter,grok").split(",")
+    if p.strip()
+]
+
+if GEMINI_API_KEY:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+    except Exception as exc:
+        print(f"Gemini initialization failed: {exc}")
+
+PRIMARY = GEMINI_MODEL
+FALLBACK = GEMINI_FALLBACK_MODEL
+
+
+def _call_gemini(prompt, temp=0.7):
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set")
+
+    model_name = FALLBACK if os.getenv("GEMINI_USE_FALLBACK_MODEL", "false").lower() == "true" else PRIMARY
+    m = genai.GenerativeModel(model_name)
+    cfg = genai.types.GenerationConfig(temperature=temp, max_output_tokens=1200)
+    response = m.generate_content(prompt, generation_config=cfg)
+    text = getattr(response, "text", None)
+    if not text:
+        raise RuntimeError("Gemini returned an empty response")
+    return text.strip()
+
+
+def _call_openrouter(prompt, temp=0.7):
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": os.getenv("APP_URL", "http://localhost:5173"),
+        "X-Title": "MockMind",
+    }
+    payload = {
+        "model": OPENROUTER_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temp,
+    }
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=60,
+    )
+    response.raise_for_status()
+    data = response.json()
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError("OpenRouter returned an empty response")
+    return content.strip()
+
+
+def _call_grok(prompt, temp=0.7):
+    if not GROK_API_KEY:
+        raise RuntimeError("GROK_API_KEY is not set")
+
+    headers = {
+        "Authorization": f"Bearer {GROK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": GROK_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temp,
+    }
+    response = requests.post(
+        "https://api.x.ai/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=60,
+    )
+    response.raise_for_status()
+    data = response.json()
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError("Grok returned an empty response")
+    return content.strip()
+
+
+def _generate_text(prompt, temp=0.7, provider_order=None):
+    providers = list(provider_order or DEFAULT_PROVIDER_ORDER)
+    last_error = None
+
+    for provider in providers:
+        try:
+            if provider == "gemini":
+                return _call_gemini(prompt, temp=temp)
+            if provider == "openrouter":
+                return _call_openrouter(prompt, temp=temp)
+            if provider == "grok":
+                return _call_grok(prompt, temp=temp)
+            raise RuntimeError(f"Unsupported provider: {provider}")
+        except Exception as exc:
+            last_error = exc
+            print(f"{provider} failed: {exc}")
+
+    print(f"All AI providers failed. Last error: {last_error}")
+    return None
 
 
 def _gemini(prompt, temp=0.7, fallback=False):
-    model_name = FALLBACK if fallback else PRIMARY
-    try:
-        m   = genai.GenerativeModel(model_name)
-        cfg = genai.types.GenerationConfig(
-            temperature=temp, max_output_tokens=1200
-        )
-        return m.generate_content(prompt, generation_config=cfg).text.strip()
-    except Exception as e:
-        err = str(e).lower()
-        if ("quota" in err or "429" in err) and not fallback:
-            print("Quota exceeded — switching to fallback model...")
-            return _gemini(prompt, temp, fallback=True)
-        print(f"Gemini error: {e}")
-        return None
+    provider_order = ["gemini", "openrouter", "grok"] if not fallback else ["openrouter", "grok", "gemini"]
+    return _generate_text(prompt, temp=temp, provider_order=provider_order)
 
 
 def _parse(text):
