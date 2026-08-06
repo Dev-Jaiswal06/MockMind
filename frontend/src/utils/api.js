@@ -14,7 +14,8 @@ API.interceptors.request.use((config) => {
 API.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const hadToken = !!err.config?.headers?.Authorization
+    if (err.response?.status === 401 && hadToken) {
       localStorage.clear()
       window.location.href = "/login"
     }

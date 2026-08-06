@@ -42,9 +42,9 @@ export default function Dashboard() {
   )
 
   const statCards = [
-    { icon:"🎯", label:"Total Interviews",    value: st.total_interviews   || 0,        color:"#8b5cf6" },
-    { icon:"📊", label:"Average Score",       value: `${Math.round(st.avg_interview_score || 0)}%`, color:"#06b6d4" },
-    { icon:"💻", label:"Coding Attempts",     value: st.total_coding       || 0,        color:"#10b981" },
+    { icon:"🎯", label:"Total Interviews",    value: st.total_interviews   || 0,        color:"#2563eb" },
+    { icon:"📊", label:"Average Score",       value: `${Math.round(st.avg_interview_score || 0)}%`, color:"#f59e0b" },
+    { icon:"💻", label:"Coding Attempts",     value: st.total_coding       || 0,        color:"#2563eb" },
     { icon:"🏆", label:"Best Performing Role",value: st.best_role          || "N/A",    color:"#f59e0b" },
   ]
 
@@ -54,8 +54,8 @@ export default function Dashboard() {
       title: "AI Mock Interview",
       desc:  "Practice with 100% AI-generated questions. Choose role-based or resume-based interview mode.",
       link:  "/interview",
-      bg:    "rgba(139,92,246,.12)",
-      bdr:   "rgba(139,92,246,.3)",
+      bg:    "rgba(37,99,235,.12)",
+      bdr:   "rgba(37,99,235,.3)",
       btn:   "var(--grad)",
       label: "Start Interview"
     },
@@ -64,9 +64,9 @@ export default function Dashboard() {
       title: "Coding Assessment",
       desc:  "Solve AI-generated coding problems in 5 languages with real-time code execution.",
       link:  "/coding",
-      bg:    "rgba(6,182,212,.12)",
-      bdr:   "rgba(6,182,212,.3)",
-      btn:   "linear-gradient(135deg,#06b6d4,#0891b2)",
+      bg:    "rgba(245,158,11,.12)",
+      bdr:   "rgba(245,158,11,.3)",
+      btn:   "linear-gradient(135deg,#2563eb,#1d4ed8)",
       label: "Start Coding"
     },
     {
@@ -209,9 +209,9 @@ export default function Dashboard() {
               <Line
                 type="monotone"
                 dataKey="score"
-                stroke="#8b5cf6"
+                stroke="#2563eb"
                 strokeWidth={2.5}
-                dot={{ fill:"#8b5cf6", r:4 }}
+                dot={{ fill:"#2563eb", r:4 }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -253,20 +253,20 @@ export default function Dashboard() {
                 <div style={{
                   fontSize:   "1.35rem",
                   fontWeight: 800,
-                  color:      s.percentage >= 70 ? "#10b981"
+                  color:      s.percentage >= 70 ? "#16a34a"
                             : s.percentage >= 50 ? "#f59e0b"
                             : "#ef4444"
                 }}>
                   {Math.round(s.percentage)}%
                 </div>
                 <span style={{
-                  background:   "rgba(139,92,246,.2)",
-                  border:       "1px solid rgba(139,92,246,.3)",
+                  background:   "rgba(22,163,74,.2)",
+                  border:       "1px solid rgba(22,163,74,.3)",
                   borderRadius: "7px",
                   padding:      "3px 9px",
                   fontSize:     ".75rem",
                   fontWeight:   700,
-                  color:        "#a78bfa"
+                  color:        "#16a34a"
                 }}>
                   {s.grade}
                 </span>

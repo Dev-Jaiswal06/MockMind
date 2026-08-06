@@ -51,6 +51,12 @@ const ROUNDS = [
     icon:  "🛠️",
     desc:  "Technical questions related to your selected role"
   },
+  {
+    id:    "mixed",
+    label: "Mixed Round",
+    icon:  "🔥",
+    desc:  "HR + Technical combined (fixed 15 questions)"
+  },
 ]
 
 // ── Screens ──
@@ -59,6 +65,11 @@ const SCREEN = {
   INTERVIEW:  "interview",
   RESULT:     "result",
 }
+
+const QUESTION_TIME_LIMIT = 120
+
+// ── AI Interviewer names — har session par random pick ──
+const INTERVIEWER_NAMES = ["Nova", "Atlas", "Vega", "Iris", "Luna", "Echo", "Aura", "Zephyr"]
 
 export default function Interview() {
   // ── Screen state ──
@@ -69,11 +80,12 @@ export default function Interview() {
   const [selectedType, setType]   = useState("role")
   const [selectedRound, setRound] = useState("hr")
   const [resumeFile,   setResume] = useState(null)
-  const [numQuestions, setNumQ]   = useState(8)
+  const [numQuestions, setNumQ]   = useState(10)
   const [starting,     setStart]  = useState(false)
   // User-side speech recognition (re-add)
   const [recordingAnswer, setRecordingAnswer] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
   const recognitionRef = useRef(null)
   const committedAnswerRef = useRef("")
   const intentionalStopRef = useRef(false)
@@ -84,11 +96,14 @@ export default function Interview() {
   const [questions,    setQuestions]  = useState([])
   const [currentIndex, setIndex]      = useState(0)
   const [answer,       setAnswer]     = useState("")
-  const [evaluation,   setEval]       = useState(null)
   const [submitting,   setSubmitting] = useState(false)
-  const [showEval,     setShowEval]   = useState(false)
+  const [completing,   setCompleting] = useState(false)
   const [timeElapsed,  setTime]       = useState(0)
-  const [allEvals,     setAllEvals]   = useState([])
+  const [questionTimeLeft, setQuestionTimeLeft] = useState(QUESTION_TIME_LIMIT)
+
+  // ── Interviewer intro state ──
+  const [interviewerName, setInterviewerName] = useState("Mira")
+  const [introDone,       setIntroDone]       = useState(false)
 
   // ── Result state ──
   const [finalResult,  setFinalResult] = useState(null)
@@ -98,33 +113,83 @@ export default function Interview() {
 
   // ── Timer ref ──
   const timerRef = useRef(null)
+  const questionStartRef = useRef(0)
+  const timeoutFiredIndexRef = useRef(-1)
 
-  // ── Start timer ──
+  // ── Mixed Round = fixed 15 questions ──
   useEffect(() => {
-    if (screen === SCREEN.INTERVIEW) {
+    if (selectedRound === "mixed" && numQuestions !== 15) {
+      setNumQ(15)
+    }
+  }, [selectedRound])
+
+  // ── Start timer (intro ke baad hi) ──
+  useEffect(() => {
+    if (screen === SCREEN.INTERVIEW && introDone) {
       timerRef.current = setInterval(() => {
         setTime(t => t + 1)
       }, 1000)
     }
     return () => clearInterval(timerRef.current)
-  }, [screen])
+  }, [screen, introDone])
 
-  
+  // ── Per-question countdown: naye question par reset (intro ke baad) ──
+  useEffect(() => {
+    if (screen !== SCREEN.INTERVIEW || !introDone) return
+    questionStartRef.current = timeElapsed
+    setQuestionTimeLeft(QUESTION_TIME_LIMIT)
+    timeoutFiredIndexRef.current = -1
+  }, [currentIndex, screen, introDone])
+
+  // ── Countdown update har tick par (intro ke baad) ──
+  useEffect(() => {
+    if (screen !== SCREEN.INTERVIEW || !introDone) return
+    const left = QUESTION_TIME_LIMIT - (timeElapsed - questionStartRef.current)
+    setQuestionTimeLeft(left > 0 ? left : 0)
+  }, [timeElapsed, screen, introDone])
+
+  // ── Interviewer intro text ──
+  const buildIntro = () => {
+    const roundWord = selectedRound === "hr"
+      ? "HR"
+      : selectedRound === "mixed" ? "HR & Technical" : "Technical"
+    let roleLine = "a resume-based"
+    if (selectedType === "role") roleLine = `a ${selectedRole.label}`
+    else if (selectedType === "both") roleLine = `a ${selectedRole.label} + resume-based`
+    return [
+      `Hi! I'm ${interviewerName}, your AI ${roundWord} Interviewer.`,
+      `Today we'll complete ${roleLine} interview consisting of ${numQuestions} questions. Answer each one naturally, and I'll evaluate your communication and technical skills.`,
+      "When you're ready, click Start Interview.",
+    ].join("\n\n")
+  }
+  const introText = buildIntro()
 
   const speakText = text => {
     if (typeof window === "undefined" || !window.speechSynthesis) return
     window.speechSynthesis.cancel()
+    setSpeaking(false)
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = "en-US"
     utterance.rate = 1
+    utterance.onstart = () => setSpeaking(true)
+    utterance.onend   = () => setSpeaking(false)
+    utterance.onerror = () => setSpeaking(false)
     window.speechSynthesis.speak(utterance)
   }
 
+  // ── Intro auto-play when interview screen appears ──
   useEffect(() => {
-    if (screen === SCREEN.INTERVIEW && questions[currentIndex]) {
+    if (screen === SCREEN.INTERVIEW && !introDone) {
+      speakText(introText)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, introDone])
+
+  useEffect(() => {
+    if (screen === SCREEN.INTERVIEW && introDone && questions[currentIndex]) {
       speakText(questions[currentIndex])
     }
-  }, [screen, currentIndex, questions])
+  }, [screen, currentIndex, questions, introDone])
 
   // Setup SpeechRecognition (created once)
   useEffect(() => {
@@ -208,6 +273,10 @@ export default function Interview() {
     ? Math.round((currentIndex / questions.length) * 100)
     : 0
 
+  // ── Question countdown colors ──
+  const qColor = questionTimeLeft > 60 ? "#16a34a" : questionTimeLeft > 30 ? "#f59e0b" : "#ef4444"
+  const qBlink = questionTimeLeft <= 30
+
   // ═══════════════════════════
   // START INTERVIEW
   // ═══════════════════════════
@@ -233,11 +302,13 @@ export default function Interview() {
       setQuestions(res.data.questions)
       setIndex(0)
       setAnswer("")
-      setEval(null)
-      setShowEval(false)
-      setAllEvals([])
       setAllQA([])
       setTime(0)
+      setQuestionTimeLeft(QUESTION_TIME_LIMIT)
+      questionStartRef.current = 0
+      timeoutFiredIndexRef.current = -1
+      setInterviewerName(INTERVIEWER_NAMES[Math.floor(Math.random() * INTERVIEWER_NAMES.length)])
+      setIntroDone(false)
       setScreen(SCREEN.INTERVIEW)
       toast.success("Interview started! Good luck! 🎯")
     } catch (err) {
@@ -248,11 +319,65 @@ export default function Interview() {
   }
 
   // ═══════════════════════════
+  // MIC TOGGLE
+  // ═══════════════════════════
+  const toggleMic = async () => {
+    if (!recognitionRef.current) { toast.error("Speech not supported") ; return }
+    if (recordingAnswer) {
+      intentionalStopRef.current = true
+      wantRecordingRef.current = false
+      try { recognitionRef.current.stop() } catch(e) {}
+      setRecordingAnswer(false)
+      return
+    }
+
+    // start: preserve any already-transcribed text
+    committedAnswerRef.current = answer || ""
+    try {
+      wantRecordingRef.current = true
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        await navigator.mediaDevices.getUserMedia({ audio: true })
+      }
+      recognitionRef.current.start()
+      toast.success("Recording... speak now")
+    } catch (err) {
+      wantRecordingRef.current = false
+      const name = err && err.name ? err.name : "error"
+      toast.error(`Microphone error: ${name}`)
+    }
+  }
+
+  // Mic ne galat suna ho toh answer clear karke dobara bol sakte ho
+  const resetAnswer = () => {
+    committedAnswerRef.current = ""
+    setAnswer("")
+    toast("Answer cleared — speak again")
+  }
+
+  // ═══════════════════════════
+  // SAVE CURRENT ANSWER (no advance)
+  // ═══════════════════════════
+  const saveCurrentAnswer = async (qi = currentIndex) => {
+    await API.post("/api/interview/submit-answer", {
+      session_id:     sessionId,
+      question:       questions[qi],
+      answer:         answer,
+      role:           selectedRole.label,
+      question_index: qi
+    })
+    setAllQA(prev => [...prev, {
+      question:   questions[qi],
+      answer:     answer,
+      evaluation: null
+    }])
+  }
+
+  // ═══════════════════════════
   // SUBMIT ANSWER
   // ═══════════════════════════
   const submitAnswer = async () => {
     if (!answer.trim()) {
-      toast.error("Please write your answer first!")
+      toast.error("Please speak your answer first!")
       return
     }
     // stop recording if active
@@ -262,75 +387,97 @@ export default function Interview() {
     }
     setSubmitting(true)
     try {
-      const res = await API.post("/api/interview/submit-answer", {
-        session_id:     sessionId,
-        question:       questions[currentIndex],
-        answer:         answer,
-        role:           selectedRole.label,
-        question_index: currentIndex
-      })
+      await saveCurrentAnswer()
 
-      const ev = res.data.evaluation
-      setEval(ev)
-      setShowEval(true)
-      setAllEvals(prev => [...prev, ev])
-      setAllQA(prev => [...prev, {
-        question:   questions[currentIndex],
-        answer:     answer,
-        evaluation: ev
-      }])
+      const isLast = currentIndex + 1 >= questions.length
+      if (isLast) {
+        await completeInterview()
+      } else {
+        setIndex(currentIndex + 1)
+        setAnswer("")
+      }
+      toast.success("Answer saved! ✅")
     } catch (err) {
-      toast.error("Failed to evaluate answer!")
+      toast.error("Failed to save answer!")
     } finally {
       setSubmitting(false)
     }
   }
 
   // ═══════════════════════════
-  // NEXT QUESTION
-  // ═══════════════════════════
-  const goNext = async (lastEval) => {
-    // stop recording if active
-    if (recordingAnswer && recognitionRef.current) {
-      try { intentionalStopRef.current = true; recognitionRef.current.stop() } catch(e) {}
-      setRecordingAnswer(false)
-    }
-    const nextIndex = currentIndex + 1
-    const isLast    = nextIndex >= questions.length
-
-    if (isLast) {
-      // Complete interview
-      await completeInterview([...allEvals, lastEval || evaluation])
-    } else {
-      setIndex(nextIndex)
-      setAnswer("")
-      setEval(null)
-      setShowEval(false)
-    }
-  }
-
-  // ═══════════════════════════
   // COMPLETE INTERVIEW
   // ═══════════════════════════
-  const completeInterview = async (evals) => {
+  const completeInterview = async () => {
     clearInterval(timerRef.current)
     // stop recording if active
     if (recordingAnswer && recognitionRef.current) {
       try { intentionalStopRef.current = true; recognitionRef.current.stop() } catch(e) {}
       setRecordingAnswer(false)
     }
+    setSubmitting(true)
+    setCompleting(true)
     try {
       const res = await API.post("/api/interview/complete", {
         session_id: sessionId,
         role:       selectedRole.label,
         time_taken: timeElapsed
       })
+      const evals = res.data.evaluations || []
+      setAllQA(prev => prev.map((qa, i) => ({ ...qa, evaluation: evals[i] || null })))
       setFinalResult(res.data)
       setScreen(SCREEN.RESULT)
     } catch (err) {
       toast.error("Failed to generate report!")
+    } finally {
+      setSubmitting(false)
+      setCompleting(false)
     }
   }
+
+  // ═══════════════════════════
+  // TIME'S UP — auto-save + next / complete
+  // ═══════════════════════════
+  const handleTimeUp = async (idx = currentIndex) => {
+    const isLast = idx + 1 >= questions.length
+    toast(isLast
+      ? "⏰ Time's up — generating your report!"
+      : "⏰ Time's up — answer saved, moving to next question",
+      { duration: 4000 })
+    if (recordingAnswer && recognitionRef.current) {
+      try { intentionalStopRef.current = true; recognitionRef.current.stop() } catch(e) {}
+      setRecordingAnswer(false)
+    }
+    setSubmitting(true)
+    try {
+      await saveCurrentAnswer(idx)
+      if (isLast) {
+        await completeInterview()
+      } else {
+        setIndex(idx + 1)
+        setAnswer("")
+        toast.success("Time's up — answer saved ✅")
+      }
+    } catch (err) {
+      toast.error("Failed to save answer!")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Countdown 0 par auto-advance (modal/busy ho toh ruk jao, phir fire karo)
+  // Har question apni alag guard rakhta hai taaki purani time-out dobara na fire ho.
+  // Extra check: transition ke waqt questionTimeLeft stale 0 rah sakta hai — tabhi
+  // current question ka asli limit elapse check bhi lagaya hai taaki naaya question
+  // turant skip na ho.
+  useEffect(() => {
+    if (screen !== SCREEN.INTERVIEW) return
+    if (questionTimeLeft > 0) return
+    if (timeElapsed - questionStartRef.current < QUESTION_TIME_LIMIT) return
+    if (timeoutFiredIndexRef.current === currentIndex) return
+    if (showConfirmModal || submitting || completing) return
+    timeoutFiredIndexRef.current = currentIndex
+    handleTimeUp(currentIndex)
+  }, [questionTimeLeft, screen, currentIndex, timeElapsed, showConfirmModal, submitting, completing])
 
   // ═══════════════════════════
   // RESTART
@@ -346,18 +493,19 @@ export default function Interview() {
     setRole(null)
     setType("role")
     setResume(null)
-    setNumQ(8)
+    setNumQ(10)
     setSessionId(null)
     setQuestions([])
     setIndex(0)
     setAnswer("")
-    setEval(null)
-    setShowEval(false)
-    setAllEvals([])
     setAllQA([])
     setFinalResult(null)
     setShowReview(false)
     setTime(0)
+    setQuestionTimeLeft(QUESTION_TIME_LIMIT)
+    questionStartRef.current = 0
+    timeoutFiredIndexRef.current = -1
+    setIntroDone(false)
   }
 
   // ════════════════════════════════════════
@@ -399,10 +547,10 @@ export default function Interview() {
                 padding:      "18px",
                 borderRadius: "12px",
                 border:       selectedType === type.id
-                                ? "2px solid #8b5cf6"
+                                ? "2px solid #2563eb"
                                 : "1px solid rgba(255,255,255,.08)",
                 background:   selectedType === type.id
-                                ? "rgba(139,92,246,.15)"
+                                ? "rgba(37,99,235,.15)"
                                 : "rgba(255,255,255,.03)",
                 cursor:       "pointer",
                 textAlign:    "center",
@@ -414,7 +562,7 @@ export default function Interview() {
                 fontWeight: 700,
                 fontSize:   "1rem",
                 marginBottom: "5px",
-                color: selectedType === type.id ? "#a78bfa" : "var(--t1)"
+                color: selectedType === type.id ? "#2563eb" : "var(--t1)"
               }}>
                 {type.label}
               </div>
@@ -452,10 +600,10 @@ export default function Interview() {
                   padding:      "16px",
                   borderRadius: "12px",
                   border:       selectedRole?.id === role.id
-                                  ? "2px solid #8b5cf6"
+                                  ? "2px solid #2563eb"
                                   : "1px solid rgba(255,255,255,.08)",
                   background:   selectedRole?.id === role.id
-                                  ? "rgba(139,92,246,.15)"
+                                  ? "rgba(37,99,235,.15)"
                                   : "rgba(255,255,255,.03)",
                   cursor:       "pointer",
                   textAlign:    "center",
@@ -468,7 +616,7 @@ export default function Interview() {
                 <div style={{
                   fontSize:   ".95rem",
                   fontWeight: selectedRole?.id === role.id ? 700 : 500,
-                  color:      selectedRole?.id === role.id ? "#a78bfa" : "var(--t1)"
+                  color:      selectedRole?.id === role.id ? "#2563eb" : "var(--t1)"
                 }}>
                   {role.label}
                 </div>
@@ -498,10 +646,10 @@ export default function Interview() {
             alignItems:   "center",
             justifyContent:"center",
             padding:      "30px",
-            border:       `2px dashed ${resumeFile ? "#10b981" : "rgba(255,255,255,.15)"}`,
+            border:       `2px dashed ${resumeFile ? "#16a34a" : "rgba(255,255,255,.15)"}`,
             borderRadius: "12px",
             cursor:       "pointer",
-            background:   resumeFile ? "rgba(16,185,129,.05)" : "rgba(255,255,255,.02)",
+            background:   resumeFile ? "rgba(22,163,74,.05)" : "rgba(255,255,255,.02)",
             transition:   "all .3s"
           }}>
             <input
@@ -518,7 +666,7 @@ export default function Interview() {
             {resumeFile ? (
               <>
                 <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>✅</div>
-                <div style={{ fontWeight: 600, color: "#10b981" }}>{resumeFile.name}</div>
+                <div style={{ fontWeight: 600, color: "#16a34a" }}>{resumeFile.name}</div>
                 <div style={{ fontSize: ".8rem", color: "var(--t2)", marginTop: "4px" }}>
                   Click to change file
                 </div>
@@ -547,7 +695,7 @@ export default function Interview() {
           <h3 style={{ fontWeight: 700, marginBottom: "12px" }}>
             {selectedType === "both" ? "Step 4" : "Step 3"} — Choose Round
           </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
             {ROUNDS.map(round => (
               <div
                 key={round.id}
@@ -556,10 +704,10 @@ export default function Interview() {
                   padding:      "16px",
                   borderRadius: "12px",
                   border:       selectedRound === round.id
-                                  ? "2px solid #8b5cf6"
+                                  ? "2px solid #2563eb"
                                   : "1px solid rgba(255,255,255,.08)",
                   background:   selectedRound === round.id
-                                  ? "rgba(139,92,246,.15)"
+                                  ? "rgba(37,99,235,.15)"
                                   : "rgba(255,255,255,.03)",
                   cursor:       "pointer",
                   textAlign:    "center",
@@ -571,7 +719,7 @@ export default function Interview() {
                   fontWeight: 700,
                   fontSize:   "1rem",
                   marginBottom: "5px",
-                  color: selectedRound === round.id ? "#a78bfa" : "var(--t1)"
+                  color: selectedRound === round.id ? "#2563eb" : "var(--t1)"
                 }}>
                   {round.label}
                 </div>
@@ -594,24 +742,59 @@ export default function Interview() {
         <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
           {selectedType === "both" ? "Step 5" : "Step 4"} — Number of Questions: <span className="gt">{numQuestions}</span>
         </h3>
-        <input
-          type="range"
-          min={5} max={15} step={1}
-          value={numQuestions}
-          onChange={e => setNumQ(Number(e.target.value))}
-          style={{ width: "100%", accentColor: "#8b5cf6" }}
-        />
         <div style={{
-          display:        "flex",
-          justifyContent: "space-between",
-          marginTop:      "8px",
-          fontSize:       ".78rem",
-          color:          "var(--t2)"
+          display:      "flex",
+          gap:          "10px",
+          flexWrap:     "wrap"
         }}>
-          <span>5 (Quick)</span>
-          <span>10 (Standard)</span>
-          <span>15 (Thorough)</span>
+          {[
+            { n: 5,  label: "5 (Quick)" },
+            { n: 10, label: "10 (Standard)" },
+            { n: 15, label: "15 (Deep)" },
+          ].map(opt => (
+            <button
+              key={opt.n}
+              onClick={() => { if (selectedRound !== "mixed") setNumQ(opt.n) }}
+              disabled={selectedRound === "mixed"}
+              style={{
+                flex:            1,
+                minWidth:        "110px",
+                padding:         "12px 16px",
+                borderRadius:    "10px",
+                border:          `1px solid ${numQuestions === opt.n ? "var(--pl)" : "var(--bdr)"}`,
+                background:      numQuestions === opt.n
+                                  ? "rgba(37,99,235,.15)"
+                                  : "var(--card2)",
+                color:           numQuestions === opt.n ? "var(--pl)" : "var(--t2)",
+                fontWeight:      600,
+                fontSize:        ".88rem",
+                cursor:          selectedRound === "mixed" ? "not-allowed" : "pointer",
+                opacity:         selectedRound === "mixed" && numQuestions !== opt.n ? .45 : 1,
+                transition:      "all .25s"
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
+        {selectedRound === "mixed" ? (
+          <div style={{
+            marginTop: "12px",
+            fontSize:  ".82rem",
+            color:     "#2563eb",
+            fontWeight: 600
+          }}>
+            🔥 Mixed Round is always fixed — 15 questions (6 HR + 9 Technical)
+          </div>
+        ) : (
+          <div style={{
+            marginTop: "12px",
+            fontSize:  ".82rem",
+            color:     "var(--t2)"
+          }}>
+            Estimated time: <span style={{ color: "var(--pl)", fontWeight: 700 }}>~{numQuestions * 3} min</span> ({numQuestions} questions × 3 min each)
+          </div>
+        )}
       </motion.div>
 
       {/* ── Start Button ── */}
@@ -631,7 +814,7 @@ export default function Interview() {
         {starting ? (
           <span style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"12px" }}>
             <div className="spinner" style={{ width:20, height:20, borderWidth:2 }}/>
-            Generating questions with AI...
+            Generating questions with AI... (max ~30s)
           </span>
         ) : (
           "🚀 Start Interview"
@@ -644,33 +827,60 @@ export default function Interview() {
   // SCREEN 2 — INTERVIEW
   // ════════════════════════════════════════
   if (screen === SCREEN.INTERVIEW) return (
-    <div style={{ padding: "28px", maxWidth: "1150px", margin: "0 auto" }}>
+    <div style={{
+      padding: "16px 28px", maxWidth: "1150px", margin: "0 auto",
+      height: "100vh", boxSizing: "border-box",
+      display: "flex", flexDirection: "column", overflow: "hidden"
+    }}>
 
       {/* ── Header ── */}
       <div style={{
         display:        "flex",
         justifyContent: "space-between",
         alignItems:     "center",
-        marginBottom:   "20px",
+        marginBottom:   "12px",
         flexWrap:       "wrap",
         gap:            "10px"
       }}>
         <div>
           <span style={{
-            background:   "rgba(139,92,246,.15)",
-            border:       "1px solid rgba(139,92,246,.3)",
+            background:   "rgba(37,99,235,.15)",
+            border:       "1px solid rgba(37,99,235,.3)",
             borderRadius: "20px",
             padding:      "5px 14px",
             fontSize:     ".82rem",
-            color:        "#a78bfa",
+            color:        "#2563eb",
             fontWeight:   600
           }}>
             💼 {selectedRole?.label}
           </span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {/* Timer */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          {/* Question countdown */}
+          <div style={{
+            display:      "flex",
+            alignItems:   "center",
+            gap:          "6px",
+            padding:      "6px 14px",
+            background:   `${qColor}18`,
+            border:       `1px solid ${qColor}55`,
+            borderRadius: "20px",
+            fontSize:     ".85rem",
+            fontWeight:   700,
+            color:        qColor
+          }}>
+            <div style={{
+              width:        "7px",
+              height:       "7px",
+              borderRadius: "50%",
+              background:   qColor,
+              animation:    qBlink ? "blink 1s infinite" : "none"
+            }}/>
+            ⏳ {formatTime(questionTimeLeft)}
+          </div>
+
+          {/* Total elapsed */}
           <div style={{
             display:      "flex",
             alignItems:   "center",
@@ -681,14 +891,7 @@ export default function Interview() {
             fontSize:     ".85rem",
             fontWeight:   600
           }}>
-            <div style={{
-              width:        "7px",
-              height:       "7px",
-              borderRadius: "50%",
-              background:   "#10b981",
-              animation:    "blink 1s infinite"
-            }}/>
-            {formatTime(timeElapsed)}
+            ⏱ {formatTime(timeElapsed)}
           </div>
 
           {/* End button */}
@@ -711,7 +914,7 @@ export default function Interview() {
       </div>
 
       {/* ── Progress Bar ── */}
-      <div style={{ marginBottom: "24px" }}>
+      <div style={{ marginBottom: "14px" }}>
         <div style={{
           display:        "flex",
           justifyContent: "space-between",
@@ -731,7 +934,7 @@ export default function Interview() {
           <motion.div
             style={{
               height:       "100%",
-              background:   "linear-gradient(90deg,#8b5cf6,#06b6d4)",
+              background:   "linear-gradient(90deg,#2563eb,#1d4ed8)",
               borderRadius: "10px"
             }}
             animate={{ width: `${progress}%` }}
@@ -741,27 +944,62 @@ export default function Interview() {
       </div>
 
       {/* ── AI Avatar ── */}
-      <div style={{ textAlign: "center", marginBottom: "20px" }}>
+      <div style={{ textAlign: "center", marginBottom: "10px" }}>
         <motion.div
           style={{
-            width:           "72px",
-            height:          "72px",
+            width:           "46px",
+            height:          "46px",
             borderRadius:    "50%",
-            background:      "linear-gradient(135deg,#8b5cf6,#06b6d4)",
+            background:      "linear-gradient(135deg,#2563eb,#1d4ed8)",
             display:         "flex",
             alignItems:      "center",
             justifyContent:  "center",
-            fontSize:        "2rem",
+            fontSize:        "1.4rem",
             margin:          "0 auto",
-            boxShadow:       "0 0 30px rgba(139,92,246,.4)"
+            boxShadow:       "0 0 30px rgba(37,99,235,.4)"
           }}
-          animate={{ boxShadow: ["0 0 30px rgba(139,92,246,.4)", "0 0 50px rgba(139,92,246,.7)", "0 0 30px rgba(139,92,246,.4)"] }}
+          animate={{ boxShadow: ["0 0 30px rgba(37,99,235,.4)", "0 0 50px rgba(37,99,235,.7)", "0 0 30px rgba(37,99,235,.4)"] }}
           transition={{ duration: 2, repeat: Infinity }}
         >
           🤖
         </motion.div>
-        <p style={{ color: "var(--t2)", fontSize: ".82rem", marginTop: "8px" }}>
-          AI Interviewer
+
+        {/* ── Speaking wave bars ── */}
+        {speaking && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            style={{
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "center",
+              gap:            "4px",
+              height:         "16px",
+              marginTop:      "6px"
+            }}
+          >
+            {[0, 1, 2, 3, 4].map(i => (
+              <motion.div
+                key={i}
+                animate={{ scaleY: [0.3, 1, 0.3] }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.12 }}
+                style={{
+                  width:           "5px",
+                  height:          "100%",
+                  background:      "linear-gradient(180deg,#2563eb,#1d4ed8)",
+                  borderRadius:    "3px",
+                  transformOrigin: "center"
+                }}
+              />
+            ))}
+          </motion.div>
+        )}
+
+        <p style={{ color: "var(--t2)", fontSize: ".75rem", marginTop: "4px" }}>
+          {speaking ? (
+            <span style={{ color: "#2563eb", fontWeight: 600 }}>AI Interviewer is speaking...</span>
+          ) : "AI Interviewer"}
         </p>
       </div>
 
@@ -774,10 +1012,10 @@ export default function Interview() {
           exit={{ opacity: 0, y: -20 }}
           className="glass"
           style={{
-            padding:    "24px",
-            marginBottom: "16px",
-            background: "rgba(139,92,246,.08)",
-            border:     "1px solid rgba(139,92,246,.25)",
+            padding:    "16px",
+            marginBottom: "10px",
+                background:   "rgba(37,99,235,.08)",
+            border:     "1px solid rgba(37,99,235,.25)",
             position:   "relative"
           }}
         >
@@ -786,7 +1024,7 @@ export default function Interview() {
             position:     "absolute",
             top:          "-12px",
             left:         "20px",
-            background:   "linear-gradient(135deg,#8b5cf6,#06b6d4)",
+            background:   "linear-gradient(135deg,#2563eb,#1d4ed8)",
             color:        "#fff",
             padding:      "3px 12px",
             borderRadius: "20px",
@@ -796,21 +1034,21 @@ export default function Interview() {
             Q{currentIndex + 1}
           </div>
 
-          <p style={{ fontSize: "1.05rem", lineHeight: 1.7, marginTop: "8px" }}>
+          <p style={{ fontSize: ".98rem", lineHeight: 1.6, marginTop: "4px" }}>
             {questions[currentIndex]}
           </p>
-          <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "10px" }}>
+          <div style={{ marginTop: "8px", display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px" }}>
             <button
               type="button"
               onClick={() => speakText(questions[currentIndex])}
               style={{
-                background: "rgba(139,92,246,.12)",
-                border: "1px solid rgba(139,92,246,.3)",
-                color: "#8b5cf6",
-                padding: "8px 14px",
+                background: "rgba(37,99,235,.12)",
+                border: "1px solid rgba(37,99,235,.3)",
+                color: "#2563eb",
+                padding: "6px 12px",
                 borderRadius: "10px",
                 cursor: "pointer",
-                fontSize: ".85rem",
+                fontSize: ".8rem",
                 fontWeight: 700
               }}
             >
@@ -820,219 +1058,154 @@ export default function Interview() {
         </motion.div>
       </AnimatePresence>
 
-      {/* ── Answer Box (hide after eval shown) ── */}
-      {!showEval && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>
-            <div style={{ color: "var(--t2)", fontSize: ".86rem" }}>
-              🎤 Speak your answer (click mic) — words will appear automatically.
-            </div>
-            {speechSupported ? (
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!recognitionRef.current) { toast.error("Speech not supported") ; return }
-                  if (recordingAnswer) {
-                    intentionalStopRef.current = true
-                    wantRecordingRef.current = false
-                    try { recognitionRef.current.stop() } catch(e) {}
-                    setRecordingAnswer(false)
-                    return
-                  }
-
-                  // start: preserve any typed text
-                  committedAnswerRef.current = answer || ""
-                  try {
-                    wantRecordingRef.current = true
-                    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                      await navigator.mediaDevices.getUserMedia({ audio: true })
-                    }
-                    recognitionRef.current.start()
-                    toast.success("Recording... speak now")
-                  } catch (err) {
-                    wantRecordingRef.current = false
-                    const name = err && err.name ? err.name : "error"
-                    toast.error(`Microphone error: ${name}`)
-                  }
-                }}
-                style={{
-                  background: recordingAnswer ? "#ef4444" : "rgba(139,92,246,.12)",
-                  border: "1px solid rgba(139,92,246,.3)",
-                  color: recordingAnswer ? "#fff" : "#8b5cf6",
-                  padding: "8px 14px",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  fontSize: ".85rem",
-                  fontWeight: 700
-                }}
-              >
-                {recordingAnswer ? "⏹ Stop mic" : "🎙️ Start mic"}
-              </button>
-            ) : (
-              <span style={{ color: "var(--t2)", fontSize: ".82rem" }}>
-                Voice typing not supported in this browser.
-              </span>
-            )}
-          </div>
-          <textarea
-            value={answer}
-            onChange={e => setAnswer(e.target.value)}
-            placeholder="Type your answer here... Be specific and provide examples where possible."
-            rows={6}
-            style={{
-              width:        "100%",
-              background:   "var(--card2)",
-              border:       "1px solid rgba(255,255,255,.1)",
-              borderRadius: "12px",
-              padding:      "16px",
-              color:        "#f1f5f9",
-              fontSize:     ".95rem",
-              fontFamily:   "Inter, sans-serif",
-              resize:       "vertical",
-              outline:      "none",
-              lineHeight:   1.6,
-              marginBottom: "14px",
-              transition:   "border .3s"
-            }}
-            onFocus={e => e.target.style.borderColor = "#8b5cf6"}
-            onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,.1)"}
-          />
-
-          <div style={{ display: "flex", gap: "10px" }}>
-            <motion.button
-              className="btn btnp"
-              onClick={submitAnswer}
-              disabled={submitting}
-              style={{ flex: 1, padding: "13px", fontSize: ".95rem" }}
-              whileHover={!submitting ? { scale: 1.01 } : {}}
-            >
-              {submitting ? (
-                <span style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"10px" }}>
-                  <div className="spinner" style={{ width:18, height:18, borderWidth:2 }}/>
-                  AI is evaluating...
-                </span>
-              ) : "✅ Submit Answer"}
-            </motion.button>
-          </div>
-        </motion.div>
-      )}
-
-      {/* ── Evaluation Card ── */}
-      {showEval && evaluation && (
-        <AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y:  0 }}
-            className="glass"
-            style={{ padding: "22px", marginTop: "4px" }}
-          >
-            {/* Score */}
-            <div style={{
-              display:      "flex",
-              alignItems:   "center",
-              gap:          "12px",
-              marginBottom: "16px"
-            }}>
-              <div style={{
-                background:   evaluation.score >= 7 ? "rgba(16,185,129,.15)"
-                            : evaluation.score >= 5 ? "rgba(245,158,11,.15)"
-                            : "rgba(239,68,68,.15)",
-                border:       `2px solid ${
-                              evaluation.score >= 7 ? "#10b981"
-                            : evaluation.score >= 5 ? "#f59e0b"
-                            : "#ef4444"}`,
-                borderRadius: "12px",
-                padding:      "10px 18px",
-                textAlign:    "center",
-                minWidth:     "80px"
-              }}>
+      {/* ── Answer Box ── */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}
+      >
+          {speechSupported ? (
+            <>
+              {speaking ? (
                 <div style={{
-                  fontSize:  "1.5rem",
-                  fontWeight: 900,
-                  color:     evaluation.score >= 7 ? "#10b981"
-                           : evaluation.score >= 5 ? "#f59e0b"
-                           : "#ef4444"
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                  color: "var(--t2)", fontSize: ".82rem", fontWeight: 500,
+                  padding: "10px 0", marginBottom: "6px"
                 }}>
-                  {evaluation.score}/10
+                  <span style={{
+                    width: "8px", height: "8px", borderRadius: "50%",
+                    background: "#f59e0b", animation: "pulse 1.2s infinite"
+                  }} />
+                  🕐 {interviewerName} is speaking... mic will appear when done
                 </div>
-                <div style={{ fontSize: ".7rem", color: "var(--t2)" }}>Score</div>
+              ) : (
+                <>
+                  <div style={{ color: "var(--t2)", fontSize: ".8rem", marginBottom: "8px" }}>
+                    🎤 Speak your answer aloud — like a real interview. Words will appear below.
+                  </div>
+
+                  {/* Big mic button */}
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: "6px" }}>
+                    <motion.button
+                      type="button"
+                      onClick={toggleMic}
+                      animate={recordingAnswer ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+                      transition={recordingAnswer ? { repeat: Infinity, duration: 1.1 } : {}}
+                      style={{
+                        width:        "52px",
+                        height:       "52px",
+                        borderRadius: "50%",
+                        background:   recordingAnswer ? "#ef4444" : "linear-gradient(135deg,#2563eb,#1d4ed8)",
+                        border:       "none",
+                        cursor:       "pointer",
+                        display:      "flex",
+                        alignItems:   "center",
+                        justifyContent: "center",
+                        fontSize:     "1.3rem",
+                        color:        "#fff",
+                        boxShadow:    recordingAnswer
+                          ? "0 0 0 14px rgba(239,68,68,.15)"
+                          : "0 8px 24px rgba(37,99,235,.35)"
+                      }}
+                    >
+                      {recordingAnswer ? "⏹" : "🎙️"}
+                    </motion.button>
+                  </div>
+                  <div style={{
+                    textAlign:    "center",
+                    color:        recordingAnswer ? "#ef4444" : "var(--t2)",
+                    fontSize:     ".78rem",
+                    fontWeight:   recordingAnswer ? 700 : 400,
+                    marginBottom: "6px"
+                  }}>
+                    {recordingAnswer ? "🔴 Listening... speak now" : "Click the mic to start your answer"}
+                  </div>
+                </>
+              )}
+
+              {/* Read-only transcript */}
+              <div style={{
+                width:        "100%",
+                flex:         1,
+                minHeight:    0,
+                overflowY:    "auto",
+                background:   "var(--card2)",
+                border:       "1px solid rgba(37,99,235,.25)",
+                borderRadius: "12px",
+                padding:      "12px 14px",
+                color:        "var(--t1)",
+                fontSize:     ".92rem",
+                lineHeight:   1.6,
+                marginBottom: "10px"
+              }}>
+                {answer ? answer : (
+                  <span style={{ color: "var(--t2)", fontSize: ".88rem" }}>
+                    Your spoken answer will appear here...
+                  </span>
+                )}
               </div>
 
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, marginBottom: "4px", fontSize: ".9rem" }}>
-                  AI Feedback
-                </div>
-                <div style={{ color: "var(--t2)", fontSize: ".85rem", lineHeight: 1.5 }}>
-                  {evaluation.feedback}
-                </div>
-              </div>
-            </div>
-
-            {/* Good Points */}
+              {/* Record again if mic heard it wrong */}
+              {answer && !recordingAnswer && (
+                <button
+                  type="button"
+                  onClick={resetAnswer}
+                  style={{
+                    background: "rgba(245,158,11,.12)",
+                    border: "1px solid rgba(245,158,11,.3)",
+                    color: "#fbbf24",
+                    padding: "6px 12px",
+                    borderRadius: "10px",
+                    cursor: "pointer",
+                    fontSize: ".78rem",
+                    fontWeight: 700,
+                    marginBottom: "8px"
+                  }}
+                >
+                  🔄 Record again (galat suna toh)
+                </button>
+              )}
+            </>
+          ) : (
             <div style={{
-              padding:      "12px",
-              borderRadius: "8px",
-              background:   "rgba(16,185,129,.08)",
-              borderLeft:   "3px solid #10b981",
-              marginBottom: "8px"
+              padding:      "20px",
+              borderRadius: "12px",
+              background:   "rgba(239,68,68,.08)",
+              border:       "1px solid rgba(239,68,68,.3)",
+              textAlign:    "center",
+              marginBottom: "14px"
             }}>
-              <div style={{ fontSize: ".72rem", color: "#10b981", fontWeight: 700, marginBottom: "4px", textTransform: "uppercase" }}>
-                ✅ What you got right
+              <div style={{ fontSize: "1.6rem", marginBottom: "8px" }}>⚠️</div>
+              <div style={{ color: "#fca5a5", fontWeight: 700, marginBottom: "6px" }}>
+                Voice interviews need microphone support
               </div>
-              <div style={{ fontSize: ".85rem", color: "var(--t2)" }}>
-                {evaluation.good_points}
+              <div style={{ color: "var(--t2)", fontSize: ".85rem", lineHeight: 1.6 }}>
+                This browser doesn't support voice input. Please use <b style={{ color: "#60a5fa" }}>Chrome</b> or <b style={{ color: "#60a5fa" }}>Edge</b> to give the interview.
               </div>
             </div>
+          )}
 
-            {/* Improve */}
-            <div style={{
-              padding:      "12px",
-              borderRadius: "8px",
-              background:   "rgba(245,158,11,.08)",
-              borderLeft:   "3px solid #f59e0b",
-              marginBottom: "8px"
-            }}>
-              <div style={{ fontSize: ".72rem", color: "#f59e0b", fontWeight: 700, marginBottom: "4px", textTransform: "uppercase" }}>
-                ⚠️ What was missing
-              </div>
-              <div style={{ fontSize: ".85rem", color: "var(--t2)" }}>
-                {evaluation.improve}
-              </div>
+          {speechSupported && (
+            <div style={{ display: "flex", gap: "8px" }}>
+              <motion.button
+                className="btn btnp"
+                onClick={submitAnswer}
+                disabled={submitting}
+                style={{ flex: 1, padding: "10px", fontSize: ".9rem" }}
+                whileHover={!submitting ? { scale: 1.01 } : {}}
+              >
+                {submitting ? (
+                  <span style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"10px" }}>
+                    <div className="spinner" style={{ width:18, height:18, borderWidth:2 }}/>
+                    {currentIndex + 1 >= questions.length
+                      ? "Evaluating answers & generating report..."
+                      : "Saving answer..."}
+                  </span>
+                ) : "✅ Submit Answer"}
+              </motion.button>
             </div>
-
-            {/* Hint */}
-            <div style={{
-              padding:      "12px",
-              borderRadius: "8px",
-              background:   "rgba(139,92,246,.08)",
-              borderLeft:   "3px solid #8b5cf6",
-              marginBottom: "16px"
-            }}>
-              <div style={{ fontSize: ".72rem", color: "#a78bfa", fontWeight: 700, marginBottom: "4px", textTransform: "uppercase" }}>
-                💡 Better answer hint
-              </div>
-              <div style={{ fontSize: ".85rem", color: "var(--t2)" }}>
-                {evaluation.hint}
-              </div>
-            </div>
-
-            {/* Next Button */}
-            <motion.button
-              className="btn btnp"
-              onClick={() => goNext(evaluation)}
-              style={{ width: "100%", padding: "13px", fontSize: ".95rem" }}
-              whileHover={{ scale: 1.01 }}
-            >
-              {currentIndex + 1 >= questions.length
-                ? "📊 View Final Results"
-                : "➡️ Next Question"}
-            </motion.button>
-          </motion.div>
-        </AnimatePresence>
-      )}
+          )}
+        </motion.div>
 
       {/* ── End Interview Confirm Modal ── */}
       <AnimatePresence>
@@ -1074,7 +1247,13 @@ export default function Interview() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => { setShowConfirmModal(false); completeInterview(allEvals) }}
+                  onClick={async () => {
+                    setShowConfirmModal(false)
+                    if (answer.trim()) {
+                      try { await saveCurrentAnswer() } catch (err) { toast.error("Answer save failed!"); return }
+                    }
+                    completeInterview()
+                  }}
                   className="btn"
                   style={{
                     flex: 1, padding: "11px",
@@ -1088,6 +1267,225 @@ export default function Interview() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Loading overlay (AI evaluating) ── */}
+      {completing && (
+        <div style={{
+          position:     "fixed", inset: 0, zIndex: 999,
+          background:   "rgba(0,0,0,.6)",
+          backdropFilter: "blur(4px)",
+          display:      "flex", alignItems: "center", justifyContent: "center",
+          flexDirection: "column", gap: "14px",
+          padding:      "20px"
+        }}>
+          <div className="spinner" style={{ width: 48, height: 48 }}/>
+          <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: "1rem", textAlign: "center" }}>
+            Evaluating your answers & generating report...
+          </div>
+          <div style={{ color: "var(--t2)", fontSize: ".82rem", textAlign: "center" }}>
+            This may take up to a minute.
+          </div>
+        </div>
+      )}
+
+      {/* ── Interviewer Intro (full-screen premium session welcome) ── */}
+      {!introDone && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          style={{
+            position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1100,
+            background: "var(--bg)",
+            overflow: "hidden"
+          }}
+        >
+          {/* Viewport-pinned wrapper: card stays centered on screen even if the page behind is taller */}
+          <div style={{
+            position: "sticky", top: 0, height: "100vh",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "min(16px, 3vw)"
+          }}>
+          {/* Soft ambient blobs (emerald-tinted, subtle) */}
+          <div style={{
+            position: "absolute", width: "480px", height: "480px", borderRadius: "50%",
+            top: "-160px", right: "-120px",
+            background: "radial-gradient(circle, rgba(37,99,235,.16), transparent 70%)",
+            filter: "blur(60px)", pointerEvents: "none"
+          }}/>
+          <div style={{
+            position: "absolute", width: "420px", height: "420px", borderRadius: "50%",
+            bottom: "-160px", left: "-100px",
+            background: "radial-gradient(circle, rgba(245,158,11,.13), transparent 70%)",
+            filter: "blur(60px)", pointerEvents: "none"
+          }}/>
+
+          <motion.div
+            className="glass"
+            initial={{ scale: .94, y: 24, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            transition={{ duration: .45, ease: "easeOut" }}
+            style={{
+              position: "relative",
+              width: "100%",
+              maxWidth: "100%",
+              minHeight: "min(calc(100vh - 96px), 520px)",
+              maxHeight: "calc(100vh - 48px)",
+              overflowY: "auto",
+              padding: "clamp(22px, 3.5vw, 38px) clamp(20px, 4vw, 56px)",
+              textAlign: "center",
+              borderRadius: "24px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}
+          >
+            {/* Top group: session chip + header */}
+            <div style={{ width: "100%" }}>
+            {/* Session chip */}
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: "8px",
+              background: "var(--card2)", border: "1px solid var(--bdr)",
+              borderRadius: "999px", padding: "5px 14px",
+              marginBottom: "12px"
+            }}>
+              <motion.span
+                animate={{ opacity: [1, .25, 1] }}
+                transition={{ duration: 1.6, repeat: Infinity }}
+                style={{
+                  width: "7px", height: "7px", borderRadius: "50%",
+                  background: "#f59e0b", display: "inline-block"
+                }}
+              />
+              <span style={{
+                fontSize: ".7rem", fontWeight: 700, letterSpacing: ".16em",
+                color: "var(--t3)", textTransform: "uppercase"
+              }}>
+                Interview Session
+              </span>
+            </div>
+
+            {/* Header */}
+            <div style={{
+              fontSize: ".78rem", fontWeight: 600, letterSpacing: ".18em",
+              color: "var(--t3)", textTransform: "uppercase",
+              marginBottom: "12px"
+            }}>
+              Your Interview Today
+            </div>
+            </div>
+
+            {/* Middle group: avatar → name → copy (screen center) */}
+            <div style={{ width: "100%" }}>
+
+            {/* Avatar */}
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+              style={{ marginBottom: "10px" }}
+            >
+              <motion.div
+                animate={{ boxShadow: ["0 0 30px rgba(37,99,235,.25)", "0 0 55px rgba(29,78,216,.45)", "0 0 30px rgba(37,99,235,.25)"] }}
+                transition={{ duration: 3, repeat: Infinity }}
+                style={{
+                  width: "80px", height: "80px", borderRadius: "50%",
+                  background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "2.3rem", margin: "0 auto"
+                }}
+              >
+                🤖
+              </motion.div>
+            </motion.div>
+
+            {/* Interviewer name + role */}
+            <h2 style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--t1)", marginBottom: "4px" }}>
+              {interviewerName}
+            </h2>
+            <div style={{ color: "var(--t2)", fontSize: ".85rem", marginBottom: "12px" }}>
+              AI {selectedRound === "mixed" ? "HR & Technical" : selectedRound === "hr" ? "HR" : "Technical"} Interviewer
+            </div>
+
+            {/* Role badge */}
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: "7px",
+              background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
+              borderRadius: "999px", padding: "4px 14px",
+              fontSize: ".78rem", fontWeight: 600, color: "#fff",
+              boxShadow: "0 4px 16px rgba(37,99,235,.35)",
+              marginBottom: "16px"
+            }}>
+              <span style={{ fontSize: ".78rem" }}>
+                {selectedRound === "mixed" ? "🔥" : selectedRound === "hr" ? "💬" : "🛠️"}
+              </span>
+              <span>
+                {selectedRound === "mixed"
+                  ? "Mixed Round · HR + Technical"
+                  : selectedRound === "hr" ? "HR Round" : "Technical Round"}
+                {selectedType === "role" || selectedType === "both"
+                  ? ` · ${selectedRole?.label}`
+                  : " · Resume Based"}
+              </span>
+            </div>
+
+            {/* Intro copy */}
+            <p style={{
+              fontSize: ".9rem", lineHeight: 1.6, color: "var(--t2)",
+                maxWidth: "600px", margin: "0 auto 18px", whiteSpace: "pre-line"
+            }}>
+              {introText}
+            </p>
+            </div>
+
+            {/* Bottom group: actions + footer */}
+            <div style={{ width: "100%" }}>
+
+            {/* Actions */}
+            <div style={{
+              display: "flex", gap: "10px", flexDirection: "column",
+              maxWidth: "420px", margin: "0 auto"
+            }}>
+              <motion.button
+                className="btn"
+                onClick={() => setIntroDone(true)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: .98 }}
+                style={{
+                  width: "100%", height: "50px", borderRadius: "14px",
+                  background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
+                  color: "#fff", fontSize: ".95rem", fontWeight: 700,
+                  boxShadow: "0 8px 24px rgba(37,99,235,.35)",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
+                }}
+              >
+                🎙 Start Interview
+              </motion.button>
+              <motion.button
+                className="btn"
+                onClick={() => speakText(introText)}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: .99 }}
+                style={{
+                  width: "100%", height: "42px", borderRadius: "12px",
+                  background: "var(--card2)",
+                  border: "1px solid var(--bdr2)",
+                  color: "var(--t2)", fontSize: ".85rem", fontWeight: 600,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
+                }}
+              >
+                🔊 Replay Introduction
+              </motion.button>
+            </div>
+
+            {/* Footer */}
+            <div style={{ marginTop: "12px", fontSize: ".72rem", color: "var(--t3)" }}>
+              The interview timer starts only after you click Start Interview.
+            </div>
+            </div>
+          </motion.div>
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 
@@ -1098,8 +1496,8 @@ export default function Interview() {
     const r      = finalResult || {}
     const report = r.report || {}
 
-    const gradeColor = r.grade === "A+" || r.grade === "A" ? "#10b981"
-                     : r.grade === "B"                     ? "#06b6d4"
+    const gradeColor = r.grade === "A+" || r.grade === "A" ? "#16a34a"
+                     : r.grade === "B"                     ? "#f59e0b"
                      : r.grade === "C"                     ? "#f59e0b"
                      : "#ef4444"
 
@@ -1143,6 +1541,9 @@ export default function Interview() {
             <div style={{ fontSize: "2.2rem", fontWeight: 900, color: gradeColor }}>
               {Math.round(r.percentage || 0)}%
             </div>
+            <div style={{ fontSize: ".68rem", fontWeight: 700, color: "var(--t2)", letterSpacing: ".14em", textTransform: "uppercase" }}>
+              Grade
+            </div>
             <div style={{ fontSize: "1rem", fontWeight: 700, color: gradeColor }}>
               {r.grade}
             </div>
@@ -1184,40 +1585,25 @@ export default function Interview() {
               </div>
             ))}
           </div>
+
+          {/* Grade legend */}
+          <div style={{
+            marginTop: "18px", paddingTop: "14px",
+            borderTop: "1px solid var(--bdr)",
+            fontSize: ".75rem", color: "var(--t3)"
+          }}>
+            <span style={{ fontWeight: 700, marginRight: "8px" }}>Grade Scale:</span>
+            A+ ≥85 · A ≥70 · B ≥55 · C ≥40 · D &lt;40
+          </div>
         </motion.div>
 
         {/* Report Cards */}
         <div style={{
           display:             "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gridTemplateColumns: "repeat(3, 1fr)",
           gap:                 "16px",
           marginBottom:        "20px"
         }}>
-
-          {/* Strengths */}
-          <motion.div
-            className="glass"
-            style={{ padding: "20px", background: "rgba(16,185,129,.05)", border: "1px solid rgba(16,185,129,.2)" }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y:  0 }}
-            transition={{ delay: .2 }}
-          >
-            <h3 style={{ color: "#10b981", marginBottom: "12px", fontWeight: 700 }}>
-              ✅ Strengths
-            </h3>
-            {(report.strengths || []).map((s, i) => (
-              <div key={i} style={{
-                padding:      "8px 10px",
-                borderRadius: "8px",
-                background:   "rgba(16,185,129,.08)",
-                marginBottom: "6px",
-                fontSize:     ".85rem",
-                color:        "var(--t2)"
-              }}>
-                • {s}
-              </div>
-            ))}
-          </motion.div>
 
           {/* Weaknesses */}
           <motion.div
@@ -1247,7 +1633,7 @@ export default function Interview() {
           {/* Recommendations */}
           <motion.div
             className="glass"
-            style={{ padding: "20px", background: "rgba(139,92,246,.05)", border: "1px solid rgba(139,92,246,.2)" }}
+            style={{ padding: "20px", background: "rgba(37,99,235,.05)", border: "1px solid rgba(37,99,235,.2)" }}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y:  0 }}
             transition={{ delay: .4 }}
@@ -1259,7 +1645,7 @@ export default function Interview() {
               <div key={i} style={{
                 padding:      "8px 10px",
                 borderRadius: "8px",
-                background:   "rgba(139,92,246,.08)",
+                background:   "rgba(37,99,235,.08)",
                 marginBottom: "6px",
                 fontSize:     ".85rem",
                 color:        "var(--t2)"
@@ -1306,9 +1692,9 @@ export default function Interview() {
                 }}>
                   {i + 1}. {step}
                 </div>
-              ))}
-            </div>
-          </motion.div>
+          ))}
+        </div>
+      </motion.div>
         </div>
 
         {/* Q&A Review Toggle */}
@@ -1349,7 +1735,7 @@ export default function Interview() {
                   border:       "1px solid var(--bdr)",
                   marginBottom: "10px"
                 }}>
-                  <div style={{ fontWeight: 600, color: "#a78bfa", marginBottom: "8px", fontSize: ".88rem" }}>
+                  <div style={{ fontWeight: 600, color: "#2563eb", marginBottom: "8px", fontSize: ".88rem" }}>
                     Q{i + 1}: {qa.question}
                   </div>
                   <div style={{
@@ -1364,29 +1750,33 @@ export default function Interview() {
                     {qa.answer}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{
-                      background:   qa.evaluation.score >= 7
-                                      ? "rgba(16,185,129,.15)"
-                                      : qa.evaluation.score >= 5
-                                      ? "rgba(245,158,11,.15)"
-                                      : "rgba(239,68,68,.15)",
-                      color:        qa.evaluation.score >= 7 ? "#10b981"
-                                  : qa.evaluation.score >= 5 ? "#f59e0b"
-                                  : "#ef4444",
-                      border:       `1px solid ${
-                                    qa.evaluation.score >= 7 ? "#10b981"
-                                  : qa.evaluation.score >= 5 ? "#f59e0b"
-                                  : "#ef4444"}`,
-                      borderRadius: "6px",
-                      padding:      "3px 10px",
-                      fontSize:     ".78rem",
-                      fontWeight:   700
-                    }}>
-                      {qa.evaluation.score}/10
-                    </span>
-                    <span style={{ fontSize: ".8rem", color: "var(--t2)" }}>
-                      {qa.evaluation.feedback}
-                    </span>
+                    {qa.evaluation && (
+                      <>
+                        <span style={{
+                          background:   qa.evaluation.score >= 7
+? "rgba(22,163,74,.15)"
+                                          : qa.evaluation.score >= 5
+                                          ? "rgba(245,158,11,.15)"
+                                          : "rgba(239,68,68,.15)",
+                          color:        qa.evaluation.score >= 7 ? "#16a34a"
+                                      : qa.evaluation.score >= 5 ? "#f59e0b"
+                                      : "#ef4444",
+                          border:       `1px solid ${
+                                        qa.evaluation.score >= 7 ? "#16a34a"
+                                      : qa.evaluation.score >= 5 ? "#f59e0b"
+                                      : "#ef4444"}`,
+                          borderRadius: "6px",
+                          padding:      "3px 10px",
+                          fontSize:     ".78rem",
+                          fontWeight:   700
+                        }}>
+                          {qa.evaluation.score}/10
+                        </span>
+                        <span style={{ fontSize: ".8rem", color: "var(--t2)" }}>
+                          {qa.evaluation.feedback}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

@@ -1,7 +1,7 @@
 # backend/reports.py
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import sessions_col, coding_col, stats_col
+from models import sessions_col, coding_col, stats_col, user_weak_topics_col
 
 reports_bp = Blueprint("reports", __name__)
 
@@ -89,8 +89,18 @@ def performance():
     ]
     weak = [r["_id"] for r in sessions_col.aggregate(weak_pipeline)]
 
+    # Weak topics — score < 4 waale questions ke topics, adaptive question gen ke liye
+    weak_rows = list(user_weak_topics_col.find(
+        {"user_id": uid}, {"role": 1, "topic": 1, "count": 1, "_id": 0}
+    ).sort("count", -1).limit(15))
+    weak_topics = [
+        {"role": r["role"], "topic": r["topic"], "count": r["count"]}
+        for r in weak_rows
+    ]
+
     return jsonify({
         "all_sessions":     all_s,
         "role_performance": role_perf,
-        "weak_roles":       weak
+        "weak_roles":       weak,
+        "weak_topics":      weak_topics
     })

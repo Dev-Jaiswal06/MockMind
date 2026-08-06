@@ -118,17 +118,17 @@ export default function Reports() {
     avg:   Math.round(r.avg)
   }))
 
-  const COLORS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#ec4899"]
+  const COLORS = ["#2563eb","#0ea5e9","#16a34a","#f59e0b","#ef4444","#ec4899"]
 
   const getGradeColor = (grade) => {
-    if (grade === "A+" || grade === "A") return "#10b981"
-    if (grade === "B")                   return "#06b6d4"
+    if (grade === "A+" || grade === "A") return "#16a34a"
+    if (grade === "B")                   return "#f59e0b"
     if (grade === "C")                   return "#f59e0b"
     return "#ef4444"
   }
 
   const getScoreColor = (score) => {
-    if (score >= 70) return "#10b981"
+    if (score >= 70) return "#16a34a"
     if (score >= 50) return "#f59e0b"
     return "#ef4444"
   }
@@ -182,7 +182,7 @@ export default function Reports() {
               icon:  "🎯",
               label: "Total Sessions",
               value: data.all_sessions?.length || 0,
-              color: "#8b5cf6"
+              color: "#2563eb"
             },
             {
               icon:  "📊",
@@ -191,7 +191,7 @@ export default function Reports() {
                 (data.all_sessions || []).reduce((a, s) => a + s.percentage, 0) /
                 (data.all_sessions?.length || 1)
               )}%`,
-              color: "#06b6d4"
+              color: "#f59e0b"
             },
             {
               icon:  "🏆",
@@ -199,7 +199,7 @@ export default function Reports() {
               value: `${Math.round(
                 Math.max(...(data.all_sessions || [{ percentage: 0 }]).map(s => s.percentage))
               )}%`,
-              color: "#10b981"
+              color: "#2563eb"
             },
             {
               icon:  "📉",
@@ -250,7 +250,7 @@ export default function Reports() {
               borderRadius: "8px",
               border:       "none",
               background:   activeTab === tab.id
-                              ? "linear-gradient(135deg,#8b5cf6,#06b6d4)"
+                              ? "linear-gradient(135deg,#2563eb,#1d4ed8)"
                               : "transparent",
               color:        activeTab === tab.id ? "#fff" : "var(--t2)",
               cursor:       "pointer",
@@ -294,9 +294,9 @@ export default function Reports() {
                   <Line
                     type="monotone"
                     dataKey="score"
-                    stroke="#8b5cf6"
+                    stroke="#2563eb"
                     strokeWidth={3}
-                    dot={{ fill: "#8b5cf6", r: 5, strokeWidth: 2, stroke: "#fff" }}
+                    dot={{ fill: "#2563eb", r: 5, strokeWidth: 2, stroke: "#fff" }}
                     activeDot={{ r: 7 }}
                   />
                 </LineChart>
@@ -332,8 +332,8 @@ export default function Reports() {
                     wrapperStyle={{ paddingTop: "12px" }}
                     iconType="square"
                   />
-                  <Bar dataKey="best" name="Best Score" fill="#8b5cf6" radius={[6,6,0,0]} />
-                  <Bar dataKey="avg" name="Average Score" fill="rgba(139,92,246,.4)" radius={[6,6,0,0]} />
+                  <Bar dataKey="best" name="Best Score" fill="#2563eb" radius={[6,6,0,0]} />
+                  <Bar dataKey="avg" name="Average Score" fill="rgba(37,99,235,.4)" radius={[6,6,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -355,7 +355,7 @@ export default function Reports() {
             {/* Table Header */}
             <div style={{
               display:             "grid",
-              gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
+              gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr",
               gap:                 "12px",
               padding:             "10px 14px",
               background:          "var(--bg2)",
@@ -371,6 +371,7 @@ export default function Reports() {
               <div>Type</div>
               <div>Score</div>
               <div>Grade</div>
+              <div>Time</div>
               <div>Date</div>
             </div>
 
@@ -380,7 +381,7 @@ export default function Reports() {
                 key={i}
                 style={{
                   display:             "grid",
-                  gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
+                  gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr",
                   gap:                 "12px",
                   padding:             "12px 14px",
                   borderRadius:        "10px",
@@ -392,13 +393,13 @@ export default function Reports() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x:  0  }}
                 transition={{ delay: i * .05 }}
-                whileHover={{ borderColor: "rgba(139,92,246,.3)" }}
+                whileHover={{ borderColor: "rgba(37,99,235,.3)" }}
               >
                 <div style={{ fontWeight: 600, fontSize: ".88rem" }}>{s.role}</div>
                 <div>
                   <span style={{
-                    background:   "rgba(139,92,246,.15)",
-                    border:       "1px solid rgba(139,92,246,.3)",
+                    background:   "rgba(37,99,235,.15)",
+                    border:       "1px solid rgba(37,99,235,.3)",
                     borderRadius: "6px",
                     padding:      "3px 8px",
                     fontSize:     ".75rem",
@@ -426,6 +427,9 @@ export default function Reports() {
                   }}>
                     {s.grade}
                   </span>
+                </div>
+                <div style={{ fontSize: ".78rem", color: "var(--t2)" }}>
+                  {Math.floor((s.time_taken || 0) / 60)}m {(s.time_taken || 0) % 60}s
                 </div>
                 <div style={{ fontSize: ".78rem", color: "var(--t2)" }}>
                   {new Date(s.created_at).toLocaleDateString("en-IN", {
@@ -580,10 +584,10 @@ export default function Reports() {
             {/* Strengths */}
             <div className="glass" style={{
               padding:    "24px",
-              background: "rgba(16,185,129,.05)",
-              border:     "1px solid rgba(16,185,129,.2)"
+              background: "rgba(22,163,74,.05)",
+              border:     "1px solid rgba(22,163,74,.2)"
             }}>
-              <h3 style={{ fontWeight: 700, marginBottom: "16px", color: "#10b981" }}>
+              <h3 style={{ fontWeight: 700, marginBottom: "16px", color: "#16a34a" }}>
                 ✅ Strong Areas
               </h3>
               {(data.role_performance || [])
@@ -602,10 +606,10 @@ export default function Reports() {
                       gap:          "10px",
                       padding:      "10px",
                       borderRadius: "8px",
-                      background:   "rgba(16,185,129,.08)",
+                      background:   "rgba(22,163,74,.08)",
                       marginBottom: "8px"
                     }}>
-                      <span style={{ color: "#10b981", fontSize: "1.2rem" }}>✅</span>
+                      <span style={{ color: "#16a34a", fontSize: "1.2rem" }}>✅</span>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: ".88rem" }}>{r.role}</div>
                         <div style={{ fontSize: ".75rem", color: "var(--t2)" }}>
@@ -653,11 +657,50 @@ export default function Reports() {
               )}
             </div>
 
+            {/* Weak Topics */}
+            <div className="glass" style={{
+              padding:    "24px",
+              background: "rgba(168,85,247,.05)",
+              border:     "1px solid rgba(168,85,247,.2)"
+            }}>
+              <h3 style={{ fontWeight: 700, marginBottom: "16px", color: "#a855f7" }}>
+                🎯 Weak Topics (Adaptive)
+              </h3>
+              {(data.weak_topics || []).length === 0 ? (
+                <p style={{ color: "var(--t2)", fontSize: ".88rem" }}>
+                  No weak topics recorded yet. Complete an interview to build your profile.
+                </p>
+              ) : (
+                (data.weak_topics || []).slice(0, 8).map((wt, i) => (
+                  <div key={i} style={{
+                    display:      "flex",
+                    alignItems:   "center",
+                    gap:          "10px",
+                    padding:      "10px",
+                    borderRadius: "8px",
+                    background:   "rgba(168,85,247,.08)",
+                    marginBottom: "8px"
+                  }}>
+                    <span style={{ fontSize: "1.2rem" }}>⚠️</span>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: ".88rem" }}>{wt.topic}</div>
+                      <div style={{ fontSize: ".75rem", color: "var(--t2)" }}>
+                        {wt.count} time{wt.count > 1 ? "s" : ""} below 4/10 · {wt.role}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <p style={{ fontSize: ".75rem", color: "var(--t3)", marginTop: "12px" }}>
+                These topics are now prioritized in your next AI interview.
+              </p>
+            </div>
+
             {/* Recommendations */}
             <div className="glass" style={{
               padding:    "24px",
-              background: "rgba(139,92,246,.05)",
-              border:     "1px solid rgba(139,92,246,.2)"
+              background: "rgba(37,99,235,.05)",
+              border:     "1px solid rgba(37,99,235,.2)"
             }}>
               <h3 style={{ fontWeight: 700, marginBottom: "16px", color: "var(--pl)" }}>
                 💡 Recommendations
@@ -700,7 +743,7 @@ export default function Reports() {
                   <button className="btn" style={{
                     width:      "100%",
                     padding:    "12px",
-                    background: "linear-gradient(135deg,#06b6d4,#0891b2)",
+                    background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
                     color:      "#fff",
                     fontWeight: 700
                   }}>

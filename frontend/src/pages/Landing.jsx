@@ -90,12 +90,12 @@ export default function Landing() {
         >
           <div style={{
             display:      "inline-block",
-            background:   "rgba(139,92,246,.12)",
-            border:       "1px solid rgba(139,92,246,.3)",
+            background:   "rgba(37,99,235,.12)",
+            border:       "1px solid rgba(37,99,235,.3)",
             borderRadius: "20px",
             padding:      "6px 16px",
             fontSize:     ".82rem",
-            color:        "#a78bfa",
+            color:        "#2563eb",
             marginBottom: "22px"
           }}>
             ✨ Powered by Google Gemini AI — 100% Free
@@ -176,7 +176,7 @@ export default function Landing() {
             <div style={{
               position:     "absolute",
               inset:        "-50px",
-              background:   "radial-gradient(circle,rgba(139,92,246,.18) 0%,transparent 70%)",
+              background:   "radial-gradient(circle,rgba(37,99,235,.18) 0%,transparent 70%)",
               borderRadius: "50%",
               animation:    "glow 3s infinite"
             }}/>
@@ -217,7 +217,7 @@ export default function Landing() {
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ delay: i * .1 }}
-              whileHover={{ y: -4, borderColor: "rgba(139,92,246,.4)" }}
+              whileHover={{ y: -4, borderColor: "rgba(37,99,235,.4)" }}
             >
               <div style={{ fontSize: "2.2rem", marginBottom: "12px" }}>{f.icon}</div>
               <h3 style={{ fontWeight: 700, marginBottom: "8px" }}>{f.title}</h3>
@@ -235,8 +235,8 @@ export default function Landing() {
           className="glass"
           style={{
             padding:    "50px 36px",
-            background: "linear-gradient(135deg,rgba(139,92,246,.1),rgba(6,182,212,.1))",
-            border:     "1px solid rgba(139,92,246,.3)"
+            background: "linear-gradient(135deg,rgba(37,99,235,.1),rgba(245,158,11,.1))",
+            border:     "1px solid rgba(37,99,235,.3)"
           }}
           initial={{ opacity: 0, scale: .95 }}
           whileInView={{ opacity: 1, scale: 1 }}
@@ -265,7 +265,7 @@ export default function Landing() {
           }}>
             {[
               ["🤖", "Google Gemini AI",  "Gemini 2.0 Flash — 1500 req/day free"],
-              ["💻", "Piston API",         "Code execution — Unlimited free"],
+              ["💻", "Judge0 API",         "Code execution — 50 req / 5 sec free"],
               ["🗄️", "MongoDB Atlas",      "Cloud database — 512MB free forever"],
               ["🚀", "Vercel / Render",    "Hosting — Free tier available"],
             ].map(([icon, name, desc], i) => (

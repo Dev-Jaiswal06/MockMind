@@ -3,7 +3,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import coding_col, update_user_stats
-from ai_engine import generate_coding_problem
+from ai_engine import generate_coding_problem, _update_coding_attempted
 from code_runner import run_with_piston
 from driver_code import wrap_with_driver, normalize_output
 from datetime import datetime
@@ -334,6 +334,10 @@ def submit_code():
         "created_at":    datetime.utcnow().isoformat(),
     })
     update_user_stats(uid)
+
+    # MongoDB tracking — coding problem attempted/solved count update karo
+    if title:
+        _update_coding_attempted(title, solved=(passed == len(tcs)))
     return jsonify({
         "results":        results,
         "passed":         passed,

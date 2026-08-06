@@ -1,6 +1,8 @@
 import sys, os, time, base64, requests
+from dotenv import load_dotenv
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.path.insert(0, os.path.dirname(__file__))
+load_dotenv()
 from driver_code import (
     _python_driver, _cpp_driver, _java_driver, _c_driver,
     _python_run_driver
@@ -9,7 +11,7 @@ from driver_code import (
 JUDGE0_URL = "https://ce.judge0.com/submissions"
 JUDGE0_HEADERS = {
     "Content-Type": "application/json",
-    "X-Subscription-Token": "a3c5f5e0f9fc422c885e5922e6b6876e"
+    "X-Subscription-Token": os.getenv("JUDGE0_SUBSCRIPTION_TOKEN", "")
 }
 results = {}
 

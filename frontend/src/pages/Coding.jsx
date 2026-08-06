@@ -13,7 +13,7 @@ const LANGUAGES = [
 ]
 
 const DIFFICULTIES = [
-  { id: "easy",   label: "Easy",   color: "#10b981" },
+  { id: "easy",   label: "Easy",   color: "#16a34a" },
   { id: "medium", label: "Medium", color: "#f59e0b" },
   { id: "hard",   label: "Hard",   color: "#ef4444" },
 ]
@@ -21,8 +21,8 @@ const DIFFICULTIES = [
 
 
 const STATUS_STYLES = {
-  "Passed":              { bg: "rgba(16,185,129,.12)",  border: "#10b981",  color: "#10b981"  },
-  "Success":             { bg: "rgba(16,185,129,.12)",  border: "#10b981",  color: "#10b981"  },
+  "Passed":              { bg: "rgba(22,163,74,.12)",  border: "#16a34a",  color: "#16a34a"  },
+  "Success":             { bg: "rgba(22,163,74,.12)",  border: "#16a34a",  color: "#16a34a"  },
   "Compilation Error":   { bg: "rgba(239,68,68,.12)",   border: "#ef4444",  color: "#ef4444"  },
   "Runtime Error":       { bg: "rgba(239,68,68,.12)",   border: "#ef4444",  color: "#ef4444"  },
   "Wrong Answer":        { bg: "rgba(245,158,11,.12)",  border: "#f59e0b",  color: "#f59e0b"  },
@@ -239,9 +239,9 @@ export default function Coding() {
             disabled={running || submitting}
             className="btn"
             style={{
-              background:   "rgba(16,185,129,.15)",
-              border:       "1px solid rgba(16,185,129,.4)",
-              color:        "#10b981",
+              background:   "rgba(22,163,74,.15)",
+              border:       "1px solid rgba(22,163,74,.4)",
+              color:        "#16a34a",
               padding:      "7px 16px",
               fontSize:     ".82rem",
               fontWeight:   700,
@@ -314,7 +314,7 @@ export default function Coding() {
                     position:    "absolute",
                     top:         "4px",
                     right:       "4px",
-                    background:  results.all_passed ? "#10b981" : "#ef4444",
+                    background:  results.all_passed ? "#16a34a" : "#ef4444",
                     color:       "#fff",
                     fontSize:    ".6rem",
                     fontWeight:  700,
@@ -349,8 +349,8 @@ export default function Coding() {
                 {/* Function Signature — LeetCode style */}
                 {problem.function_signature?.[language] && (
                   <div style={{
-                    background:   "rgba(139,92,246,.06)",
-                    border:       "1px solid rgba(139,92,246,.25)",
+                    background:   "rgba(22,163,74,.06)",
+                    border:       "1px solid rgba(22,163,74,.25)",
                     borderRadius: "10px",
                     padding:      "14px",
                     marginBottom: "20px"
@@ -366,7 +366,7 @@ export default function Coding() {
                       margin: 0,
                       fontFamily: "JetBrains Mono, Fira Code, monospace",
                       fontSize: ".85rem",
-                      color: "#a78bfa",
+                      color: "#2563eb",
                       whiteSpace: "pre-wrap"
                     }}>
                       {problem.function_signature[language]}
@@ -386,7 +386,7 @@ export default function Coding() {
                   }}>
                     <div style={{ marginBottom: "6px" }}>
                       <strong style={{ color: "var(--t2)" }}>Input: </strong>
-                      <code style={{ color: "#10b981" }}>{ex.input}</code>
+                      <code style={{ color: "#16a34a" }}>{ex.input}</code>
                     </div>
                     <div style={{ marginBottom: "6px" }}>
                       <strong style={{ color: "var(--t2)" }}>Output: </strong>
@@ -519,9 +519,9 @@ export default function Coding() {
                       display:      "inline-flex",
                       alignItems:   "center",
                       gap:          "6px",
-                      background:   runResults.all_passed ? "rgba(16,185,129,.12)" : "rgba(239,68,68,.12)",
-                      border:       `1px solid ${runResults.all_passed ? "#10b981" : "#ef4444"}`,
-                      color:        runResults.all_passed ? "#10b981" : "#ef4444",
+                      background:   runResults.all_passed ? "rgba(22,163,74,.12)" : "rgba(239,68,68,.12)",
+                      border:       `1px solid ${runResults.all_passed ? "#16a34a" : "#ef4444"}`,
+                      color:        runResults.all_passed ? "#16a34a" : "#ef4444",
                       borderRadius: "8px",
                       padding:      "5px 14px",
                       fontSize:     ".8rem",
@@ -588,7 +588,7 @@ export default function Coding() {
                             <code style={{
                               display: "block", background: "rgba(0,0,0,.2)",
                               padding: "8px 10px", borderRadius: "6px",
-                              fontSize: ".8rem", color: "#10b981",
+                              fontSize: ".8rem", color: "#16a34a",
                               whiteSpace: "pre-wrap", wordBreak: "break-all"
                             }}>
                               {tc.expected || "(empty)"}
@@ -603,7 +603,7 @@ export default function Coding() {
                               display: "block", background: "rgba(0,0,0,.2)",
                               padding: "8px 10px", borderRadius: "6px",
                               fontSize: ".8rem",
-                              color: tc.passed ? "#10b981" : "#ef4444",
+                              color: tc.passed ? "#16a34a" : "#ef4444",
                               whiteSpace: "pre-wrap", wordBreak: "break-all"
                             }}>
                               {tc.got || "(no output)"}
@@ -679,15 +679,15 @@ export default function Coding() {
                       marginBottom:  "20px",
                       padding:       "18px",
                       borderRadius:  "12px",
-                      background:    results.all_passed ? "rgba(16,185,129,.08)" : "rgba(239,68,68,.08)",
-                      border:        `1px solid ${results.all_passed ? "#10b981" : "#ef4444"}`
+                      background:    results.all_passed ? "rgba(22,163,74,.08)" : "rgba(239,68,68,.08)",
+                      border:        `1px solid ${results.all_passed ? "#16a34a" : "#ef4444"}`
                     }}>
                       {/* Score circle */}
                       <div style={{
                         width:         "60px",
                         height:        "60px",
                         borderRadius:  "50%",
-                        border:        `3px solid ${results.all_passed ? "#10b981" : "#ef4444"}`,
+                        border:        `3px solid ${results.all_passed ? "#16a34a" : "#ef4444"}`,
                         display:       "flex",
                         flexDirection: "column",
                         alignItems:    "center",
@@ -698,7 +698,7 @@ export default function Coding() {
                           fontWeight: 800,
                           fontSize:   "1.1rem",
                           lineHeight: 1,
-                          color:      results.all_passed ? "#10b981" : "#ef4444"
+                          color:      results.all_passed ? "#16a34a" : "#ef4444"
                         }}>
                           {Math.round(results.score)}%
                         </div>
@@ -707,7 +707,7 @@ export default function Coding() {
                         <div style={{
                           fontWeight: 800,
                           fontSize:   "1rem",
-                          color:      results.all_passed ? "#10b981" : "#ef4444"
+                          color:      results.all_passed ? "#16a34a" : "#ef4444"
                         }}>
                           {results.passed} / {results.total} Test Cases Passed
                         </div>
@@ -783,7 +783,7 @@ export default function Coding() {
                               padding:     "8px 10px",
                               borderRadius: "6px",
                               fontSize:    ".8rem",
-                              color:       "#10b981",
+                              color:       "#16a34a",
                               whiteSpace:  "pre-wrap",
                               wordBreak:   "break-all"
                             }}>
@@ -802,7 +802,7 @@ export default function Coding() {
                               padding:     "8px 10px",
                               borderRadius: "6px",
                               fontSize:    ".8rem",
-                              color:       tc.passed ? "#10b981" : "#ef4444",
+                              color:       tc.passed ? "#16a34a" : "#ef4444",
                               whiteSpace:  "pre-wrap",
                               wordBreak:   "break-all"
                             }}>

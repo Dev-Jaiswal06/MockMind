@@ -15,15 +15,15 @@ export default function Sidebar() {
   const { user, logout }    = useAuth()
   const location            = useLocation()
   const [collapsed, setCol] = useState(false)
+  const [showLogout, setShowLogout] = useState(false)
   const [dark, setDark]     = useState(() => {
-    const saved = localStorage.getItem("mm-theme")
-    if (saved) return saved === "dark"
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
+    const saved = sessionStorage.getItem("mm-theme")
+    return saved === "dark"
   })
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark)
-    localStorage.setItem("mm-theme", dark ? "dark" : "light")
+    sessionStorage.setItem("mm-theme", dark ? "dark" : "light")
   }, [dark])
 
   return (
@@ -60,7 +60,7 @@ export default function Sidebar() {
               style={{ fontWeight: 900, fontSize: "1.2rem" }}
             >
               <span style={{
-                background:              "linear-gradient(135deg,#8b5cf6,#06b6d4)",
+                background:              "linear-gradient(135deg,#2563eb,#1d4ed8)",
                 WebkitBackgroundClip:    "text",
                 WebkitTextFillColor:     "transparent"
               }}>
@@ -110,10 +110,10 @@ export default function Sidebar() {
                   padding:      collapsed ? "12px" : "14px 18px",
                   borderRadius: "10px",
                   background:   isActive
-                                  ? "rgba(139,92,246,.2)"
+                                  ? "rgba(37,99,235,.2)"
                                   : "transparent",
                   border:       isActive
-                                  ? "1px solid rgba(139,92,246,.4)"
+                                  ? "1px solid rgba(37,99,235,.4)"
                                   : "1px solid transparent",
                   cursor:       "pointer",
                   transition:   "all .2s",
@@ -151,7 +151,7 @@ export default function Sidebar() {
                       width:        "6px",
                       height:       "6px",
                       borderRadius: "50%",
-                      background:   "#8b5cf6",
+                      background:   "#2563eb",
                       marginLeft:   "auto",
                       flexShrink:   0,
                       display:      collapsed ? "none" : "block"
@@ -221,7 +221,7 @@ export default function Sidebar() {
             width:           "36px",
             height:          "36px",
             borderRadius:    "50%",
-            background:      "linear-gradient(135deg,#8b5cf6,#06b6d4)",
+            background:      "linear-gradient(135deg,#2563eb,#1d4ed8)",
             display:         "flex",
             alignItems:      "center",
             justifyContent:  "center",
@@ -271,7 +271,7 @@ export default function Sidebar() {
 
         {/* Logout */}
         <button
-          onClick={logout}
+          onClick={() => setShowLogout(true)}
           style={{
             width:        "100%",
             padding:      collapsed ? "10px" : "9px 14px",
@@ -303,6 +303,61 @@ export default function Sidebar() {
           </AnimatePresence>
         </button>
       </div>
+
+      {/* ── Sign Out Confirm Modal ── */}
+      <AnimatePresence>
+        {showLogout && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowLogout(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 1000,
+              background: "rgba(0,0,0,.5)",
+              backdropFilter: "blur(4px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "20px"
+            }}
+          >
+            <motion.div
+              className="glass"
+              initial={{ scale: .9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: .9, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              style={{ padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}
+            >
+              <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>🚪</div>
+              <h3 style={{ fontSize: "1.15rem", fontWeight: 700, marginBottom: "8px" }}>
+                Sign Out?
+              </h3>
+              <p style={{ color: "var(--t2)", fontSize: ".88rem", marginBottom: "24px" }}>
+                Are you sure you want to sign out?
+              </p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={() => setShowLogout(false)}
+                  className="btn btns"
+                  style={{ flex: 1, padding: "11px" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowLogout(false); logout() }}
+                  className="btn"
+                  style={{
+                    flex: 1, padding: "11px",
+                    background: "var(--err)", color: "#fff", fontWeight: 700
+                  }}
+                >
+                  Sign Out
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

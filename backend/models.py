@@ -56,6 +56,13 @@ stats_col      = db["user_stats"]
 password_resets_col = db["password_resets"]
 email_verifications_col = db["email_verifications"]
 
+# ── Fallback Question Bank Collections ──
+question_bank_col   = db["question_bank"]
+coding_problems_col = db["coding_problems"]
+hr_questions_col    = db["hr_questions"]
+user_questions_col  = db["user_questions"]
+user_weak_topics_col = db["user_weak_topics"]
+
 
 def init_db():
     """Indexes banao — fast queries ke liye"""
@@ -71,6 +78,22 @@ def init_db():
     except Exception:
         pass
     email_verifications_col.create_index([("code", ASCENDING)])
+    # ── Fallback Question Bank Indexes ──
+    question_bank_col.create_index([("role", ASCENDING), ("type", ASCENDING), ("difficulty", ASCENDING)])
+    question_bank_col.create_index([("asked_count", ASCENDING)])
+    question_bank_col.create_index([("role", ASCENDING), ("type", ASCENDING), ("asked_count", ASCENDING)])
+    coding_problems_col.create_index([("difficulty", ASCENDING)])
+    coding_problems_col.create_index([("topic", ASCENDING)])
+    coding_problems_col.create_index([("attempted", ASCENDING)])
+    hr_questions_col.create_index([("category", ASCENDING)])
+    hr_questions_col.create_index([("asked_count", ASCENDING)])
+    hr_questions_col.create_index([("category", ASCENDING), ("asked_count", ASCENDING)])
+    user_questions_col.create_index([("user_id", ASCENDING)])
+    user_weak_topics_col.create_index(
+        [("user_id", ASCENDING), ("role", ASCENDING), ("topic", ASCENDING)],
+        unique=True,
+    )
+    user_weak_topics_col.create_index([("count", DESCENDING)])
     print("[OK] MockMind MongoDB Connected & Ready!")
 
 
