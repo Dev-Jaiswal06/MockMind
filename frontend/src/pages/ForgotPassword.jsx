@@ -78,12 +78,12 @@ export default function ForgotPassword() {
           <div style={{
             textAlign:   "center",
             padding:     "20px",
-            background:  "rgba(16,185,129,.08)",
-            border:      "1px solid rgba(16,185,129,.3)",
+            background:  "rgba(22,163,74,.08)",
+            border:      "1px solid rgba(22,163,74,.3)",
             borderRadius:"12px"
           }}>
             <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>📧</div>
-            <h3 style={{ fontWeight: 700, marginBottom: "8px", color: "#10b981" }}>
+            <h3 style={{ fontWeight: 700, marginBottom: "8px", color: "#16a34a" }}>
               Check your inbox
             </h3>
             <p style={{ color: "var(--t2)", fontSize: ".88rem", lineHeight: 1.6 }}>

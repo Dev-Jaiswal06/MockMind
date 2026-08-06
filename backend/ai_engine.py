@@ -1,6 +1,7 @@
 # backend/ai_engine.py — Gemini / OpenRouter / Grok fallback support
 import os, json, random, re
 import requests
+from datetime import datetime
 import google.generativeai as genai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -20,6 +21,7 @@ DEFAULT_PROVIDER_ORDER = [
     for p in os.getenv("AI_PROVIDER_ORDER", "gemini,openrouter,grok").split(",")
     if p.strip()
 ]
+AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "20"))
 
 if GEMINI_API_KEY:
     try:
@@ -31,21 +33,25 @@ PRIMARY = GEMINI_MODEL
 FALLBACK = GEMINI_FALLBACK_MODEL
 
 
-def _call_gemini(prompt, temp=0.7):
+def _call_gemini(prompt, temp=0.7, max_tokens=1200, timeout=None):
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set")
 
     model_name = FALLBACK if os.getenv("GEMINI_USE_FALLBACK_MODEL", "false").lower() == "true" else PRIMARY
     m = genai.GenerativeModel(model_name)
-    cfg = genai.types.GenerationConfig(temperature=temp, max_output_tokens=1200)
-    response = m.generate_content(prompt, generation_config=cfg)
+    cfg = genai.types.GenerationConfig(temperature=temp, max_output_tokens=max_tokens)
+    response = m.generate_content(
+        prompt,
+        generation_config=cfg,
+        request_options={"timeout": timeout or AI_TIMEOUT},
+    )
     text = getattr(response, "text", None)
     if not text:
         raise RuntimeError("Gemini returned an empty response")
     return text.strip()
 
 
-def _call_openrouter(prompt, temp=0.7):
+def _call_openrouter(prompt, temp=0.7, max_tokens=1200, timeout=None):
     if not OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
@@ -59,12 +65,13 @@ def _call_openrouter(prompt, temp=0.7):
         "model": OPENROUTER_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": temp,
+        "max_tokens": max_tokens,
     }
     response = requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
         headers=headers,
         json=payload,
-        timeout=60,
+        timeout=timeout or AI_TIMEOUT,
     )
     response.raise_for_status()
     data = response.json()
@@ -74,7 +81,7 @@ def _call_openrouter(prompt, temp=0.7):
     return content.strip()
 
 
-def _call_grok(prompt, temp=0.7):
+def _call_grok(prompt, temp=0.7, max_tokens=1200, timeout=None):
     if not GROK_API_KEY:
         raise RuntimeError("GROK_API_KEY is not set")
 
@@ -86,12 +93,13 @@ def _call_grok(prompt, temp=0.7):
         "model": GROK_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": temp,
+        "max_tokens": max_tokens,
     }
     response = requests.post(
         "https://api.x.ai/v1/chat/completions",
         headers=headers,
         json=payload,
-        timeout=60,
+        timeout=timeout or AI_TIMEOUT,
     )
     response.raise_for_status()
     data = response.json()
@@ -101,18 +109,18 @@ def _call_grok(prompt, temp=0.7):
     return content.strip()
 
 
-def _generate_text(prompt, temp=0.7, provider_order=None):
+def _generate_text(prompt, temp=0.7, provider_order=None, max_tokens=1200, timeout=None):
     providers = list(provider_order or DEFAULT_PROVIDER_ORDER)
     last_error = None
 
     for provider in providers:
         try:
             if provider == "gemini":
-                return _call_gemini(prompt, temp=temp)
+                return _call_gemini(prompt, temp=temp, max_tokens=max_tokens, timeout=timeout)
             if provider == "openrouter":
-                return _call_openrouter(prompt, temp=temp)
+                return _call_openrouter(prompt, temp=temp, max_tokens=max_tokens, timeout=timeout)
             if provider == "grok":
-                return _call_grok(prompt, temp=temp)
+                return _call_grok(prompt, temp=temp, max_tokens=max_tokens, timeout=timeout)
             raise RuntimeError(f"Unsupported provider: {provider}")
         except Exception as exc:
             last_error = exc
@@ -122,9 +130,294 @@ def _generate_text(prompt, temp=0.7, provider_order=None):
     return None
 
 
-def _gemini(prompt, temp=0.7, fallback=False):
+def _gemini(prompt, temp=0.7, fallback=False, max_tokens=1200, timeout=None):
     provider_order = ["gemini", "openrouter", "grok"] if not fallback else ["openrouter", "grok", "gemini"]
-    return _generate_text(prompt, temp=temp, provider_order=provider_order)
+    return _generate_text(prompt, temp=temp, provider_order=provider_order, max_tokens=max_tokens, timeout=timeout)
+
+
+# ══════════════════════════════════════════════════════════════
+# MONGODB FALLBACK FUNCTIONS
+# ══════════════════════════════════════════════════════════════
+
+try:
+    from models import (question_bank_col, coding_problems_col, hr_questions_col,
+                        user_questions_col, user_weak_topics_col, stats_col)
+except ImportError:
+    question_bank_col = None
+    coding_problems_col = None
+    hr_questions_col = None
+    user_questions_col = None
+    user_weak_topics_col = None
+    stats_col = None
+
+
+def _get_user_seen_questions(user_id):
+    """User ke pehle dekhe questions ki lowercase keys lo (repeat rokne ke liye)."""
+    if not user_id or user_questions_col is None:
+        return set()
+    try:
+        rows = list(user_questions_col.find(
+            {"user_id": user_id}, {"question": 1, "_id": 0}
+        ).limit(1000))
+        return {str(r.get("question", "")).strip().lower() for r in rows if r.get("question")}
+    except Exception:
+        return set()
+
+
+def _record_user_questions(user_id, questions):
+    """User ko diye gaye questions record karo — dobara na aayen."""
+    if not user_id or user_questions_col is None or not questions:
+        return
+    try:
+        docs = [
+            {"user_id": user_id, "question": q, "asked_at": datetime.utcnow().isoformat()}
+            for q in questions
+            if isinstance(q, str) and q.strip()
+        ]
+        if docs:
+            user_questions_col.insert_many(docs)
+    except Exception:
+        pass
+
+
+def _random_docs(col, match, size):
+    """Atlas me $sample unsupported hai — count+skip+limit se random docs lo."""
+    if size <= 0:
+        return []
+    try:
+        total = col.count_documents(match)
+        if total == 0:
+            return []
+        size = min(size, total)
+        if size >= total:
+            return list(col.find(match).limit(size))
+        offset = random.randint(0, total - size)
+        return list(col.find(match).skip(offset).limit(size))
+    except Exception:
+        return []
+
+
+def _get_mongodb_technical_questions(role, num_q=8, difficulty_mix=None, seen=None, prefer_topics=None):
+    """MongoDB se technical questions lo with difficulty balance (seen skip karo).
+    prefer_topics diya ho toh un topics ke questions pehle pick hote hain (weak areas)."""
+    if question_bank_col is None:
+        return None
+
+    if difficulty_mix is None:
+        difficulty_mix = {"easy": 2, "medium": 4, "hard": 2}
+    seen = seen or set()
+    db_role = role.lower().strip()
+
+    def _order_by_weak(rows):
+        if not prefer_topics:
+            return rows
+        weak_rows, normal_rows = [], []
+        for r in rows:
+            if any(t in _extract_topics(r.get("question", ""), role) for t in prefer_topics):
+                weak_rows.append(r)
+            else:
+                normal_rows.append(r)
+        return weak_rows + normal_rows
+
+    all_questions = []
+    seen_texts = set()
+    for diff, count in difficulty_mix.items():
+        if count <= 0:
+            continue
+        if len(all_questions) >= num_q:
+            break
+        # seen filtering ke baad bhi count mil sake isliye extra fetch karo
+        fetch = min(max(count * 4, count + 10), 60)
+        results = _random_docs(
+            question_bank_col,
+            {"role": db_role, "type": "technical", "difficulty": diff},
+            fetch,
+        )
+        added = 0
+        for r in _order_by_weak(results):
+            if added >= count or len(all_questions) >= num_q:
+                break
+            q_text = r["question"]
+            key = q_text.strip().lower()
+            if key in seen or key in seen_texts:
+                continue
+            seen_texts.add(key)
+            all_questions.append({
+                "question": q_text,
+                "difficulty": r.get("difficulty", diff),
+                "asked_count": r.get("asked_count", 0),
+                "_id": r["_id"],
+            })
+            added += 1
+
+    # Agar kam questions aaye toh balance ke bina bhi try karo
+    if len(all_questions) < num_q:
+        remaining = num_q - len(all_questions)
+        fetch = min(max(remaining * 4, remaining + 10), 60)
+        results = _random_docs(
+            question_bank_col,
+            {"role": db_role, "type": "technical"},
+            fetch,
+        )
+        for r in _order_by_weak(results):
+            q_text = r["question"]
+            key = q_text.strip().lower()
+            if key in seen or key in seen_texts:
+                continue
+            if len(all_questions) >= num_q:
+                break
+            seen_texts.add(key)
+            all_questions.append({
+                "question": q_text,
+                "difficulty": r.get("difficulty", "medium"),
+                "asked_count": r.get("asked_count", 0),
+                "_id": r["_id"],
+            })
+
+    return all_questions[:num_q] if all_questions else None
+
+
+def _get_mongodb_hr_questions(num_q=8, seen=None):
+    """MongoDB se HR questions lo (seen skip karo)."""
+    if hr_questions_col is None:
+        return None
+
+    seen = seen or set()
+    fetch = min(max(num_q * 4, num_q + 10), 60)
+    results = _random_docs(hr_questions_col, {}, fetch)
+    questions = []
+    seen_texts = set()
+    for r in results:
+        q_text = r["question"]
+        key = q_text.strip().lower()
+        if key in seen or key in seen_texts:
+            continue
+        if len(questions) >= num_q:
+            break
+        seen_texts.add(key)
+        questions.append({
+            "question": q_text,
+            "category": r.get("category", "behavioral"),
+            "asked_count": r.get("asked_count", 0),
+            "_id": r["_id"],
+        })
+    return questions if questions else None
+
+
+def _get_mongodb_coding_problem(difficulty=None):
+    """MongoDB se coding problem lo (least attempted pehle)."""
+    if coding_problems_col is None:
+        return None
+
+    try:
+        match = {}
+        if difficulty:
+            match["difficulty"] = difficulty
+        result = list(
+            coding_problems_col.find(match)
+            .sort([("attempted", 1)])
+            .limit(1)
+        )
+        if result:
+            r = result[0]
+            r.pop("_id", None)
+            return r
+    except Exception:
+        pass
+    return None
+
+
+def _update_question_asked_count(question_id, collection_type="question_bank"):
+    """Question ka asked_count badhao."""
+    try:
+        if collection_type == "question_bank" and question_bank_col is not None:
+            question_bank_col.update_one({"_id": question_id}, {"$inc": {"asked_count": 1}})
+        elif collection_type == "hr" and hr_questions_col is not None:
+            hr_questions_col.update_one({"_id": question_id}, {"$inc": {"asked_count": 1}})
+    except Exception:
+        pass
+
+
+def _update_question_score(question_id, score, collection_type="question_bank"):
+    """Question ka avg_score update karo."""
+    try:
+        col = question_bank_col if collection_type == "question_bank" else hr_questions_col
+        if col is not None:
+            col.update_one(
+                {"_id": question_id},
+                {"$inc": {"total_score_sum": score, "times_scored": 1},
+                 "$set": {"avg_score": score}}
+            )
+            # Recalculate avg
+            doc = col.find_one({"_id": question_id})
+            if doc and doc.get("times_scored", 0) > 0:
+                new_avg = doc["total_score_sum"] / doc["times_scored"]
+                col.update_one({"_id": question_id}, {"$set": {"avg_score": round(new_avg, 2)}})
+    except Exception:
+        pass
+
+
+def _update_coding_attempted(title, solved=False):
+    """Coding problem ka attempted/solved count badhao."""
+    try:
+        if coding_problems_col is not None:
+            inc_fields = {"attempted": 1}
+            if solved:
+                inc_fields["solved"] = 1
+            coding_problems_col.update_one({"title": title}, {"$inc": inc_fields})
+    except Exception:
+        pass
+
+
+def _save_ai_question_to_db(question_text, role, round_type, difficulty="medium"):
+    """Gemini Bonus — AI-generated question ko MongoDB me save karo."""
+    try:
+        if round_type == "hr" and hr_questions_col is not None:
+            existing = hr_questions_col.find_one({"question": question_text})
+            if not existing:
+                hr_questions_col.insert_one({
+                    "question": question_text,
+                    "category": "behavioral",
+                    "asked_count": 0,
+                    "avg_score": 0.0,
+                    "total_score_sum": 0.0,
+                    "times_scored": 0,
+                    "source": "ai_generated",
+                })
+        elif round_type == "technical" and question_bank_col is not None:
+            existing = question_bank_col.find_one({"question": question_text, "role": role})
+            if not existing:
+                question_bank_col.insert_one({
+                    "role": role,
+                    "type": "technical",
+                    "difficulty": difficulty,
+                    "question": question_text,
+                    "asked_count": 0,
+                    "avg_score": 0.0,
+                    "total_score_sum": 0.0,
+                    "times_scored": 0,
+                    "source": "ai_generated",
+                })
+    except Exception:
+        pass
+
+
+def _save_ai_coding_to_db(problem):
+    """Gemini Bonus — AI-generated coding problem ko MongoDB me save karo."""
+    try:
+        if coding_problems_col is not None and problem:
+            existing = coding_problems_col.find_one({"title": problem.get("title", "")})
+            if not existing:
+                doc = dict(problem)
+                doc["attempted"] = 0
+                doc["solved"] = 0
+                doc["avg_score"] = 0.0
+                doc["total_score_sum"] = 0.0
+                doc["times_scored"] = 0
+                doc["source"] = "ai_generated"
+                coding_problems_col.insert_one(doc)
+    except Exception:
+        pass
 
 
 def _parse(text):
@@ -405,6 +698,253 @@ ROLE_TOPICS = {
 }
 
 
+# ══════════════════════════════════════════════════════════════
+# WEAK TOPIC TRACKING — adaptive question personalization
+# ══════════════════════════════════════════════════════════════
+
+# Har role ke topic keywords — question text se topic nikalne ke liye.
+# Pehla match priority — order important hai (specific → generic).
+ROLE_TOPIC_KEYWORDS = {
+    "frontend developer": [
+        ("React & Components", ["react", "virtual dom", "usememo", "usecallback", "react.lazy", "suspense",
+                                 "controlled", "uncontrolled", "component", "jsx"]),
+        ("CSS & Layout", ["css", "grid", "flexbox", "sass", "custom propert", "shadow dom",
+                          "critical rendering", "reflow", "repaint"]),
+        ("JavaScript Core", ["javascript", "event delegation", "bubbling", "web worker",
+                             "requestanimationframe", "localstorage", "sessionstorage",
+                             "indexeddb", "cookies"]),
+        ("Browser & Network", ["cors", "preflight", "server-side", "client-side"]),
+        ("SSR & Rendering", ["ssr", "ssg", "isr", "progressive image"]),
+    ],
+    "backend developer": [
+        ("Databases & ORMs", ["n+1", "orm", "sqlalchemy", "django", "connection pool", "transaction",
+                              "acid", "sharding", "optimistic", "pessimistic", "locking",
+                              "query", "index", "schema", "migration"]),
+        ("System Design & Scaling", ["cap theorem", "horizontal", "vertical", "scal", "rate limit",
+                                     "token bucket", "sliding window", "saga", "two-phase",
+                                     "distributed", "idempotency"]),
+        ("APIs & Authentication", ["jwt", "token", "rest", "endpoint", "keep-alive", "http", "api"]),
+        ("Messaging & Caching", ["message queue", "rabbitmq", "kafka", "cache", "invalidation",
+                                 "write-through", "write-behind", "write-around"]),
+        ("Operations & Reliability", ["graceful shutdown", "in-flight", "connection", "load balanc"]),
+    ],
+    "full stack developer": [
+        ("Real-time & WebSockets", ["websocket", "polling", "long-polling", "sse", "real-time"]),
+        ("Frontend Patterns", ["optimistic ui", "spa", "server-side rendering", "client-side",
+                               "dark mode", "infinite scroll"]),
+        ("APIs & Data", ["rest", "graphql", "bff", "autocomplete", "file upload", "multipart",
+                         "presigned", "api gateway", "role-based", "rbac"]),
+        ("Architecture", ["microservice", "strangler fig", "monolith", "state", "cache"]),
+        ("Debugging & Performance", ["slow page load", "debugging", "debug", "performance"]),
+    ],
+    "machine learning": [
+        ("ML Fundamentals", ["bias-variance", "model complexity", "learning curve", "overfitt",
+                             "cross-validation", "stratified", "train-test"]),
+        ("Deep Learning", ["vanishing gradient", "lstm", "resnet", "attention", "transformer",
+                           "self-attention", "cross-attention", "normalization"]),
+        ("Regularization & Optimization", ["l1", "l2", "regularization", "lasso", "ridge",
+                                           "gradient boost", "xgboost", "lightgbm", "catboost"]),
+        ("Data & Features", ["missing data", "imputation", "mice", "knn", "dimensionality", "pca",
+                             "feature importance", "data leakage"]),
+        ("Evaluation Metrics", ["precision", "recall", "f1", "auc", "roc"]),
+        ("MLOps & Deployment", ["deploy", "production", "drift", "monitoring", "generative",
+                                "discriminative"]),
+    ],
+    "data science": [
+        ("Statistics", ["p-value", "hypothesis", "simpson", "central limit", "anova", "t-test",
+                        "parametric", "non-parametric", "correlation", "causation"]),
+        ("Experiments & A/B Testing", ["a/b", "ab test", "sample size", "significance"]),
+        ("Regression & Modeling", ["regression", "multicollinearity", "survival analysis",
+                                   "kaplan-meier", "cox", "outlier", "z-score", "iqr",
+                                   "isolation forest"]),
+        ("Imbalanced Data", ["imbalanced", "oversam", "undersam", "smote"]),
+        ("Time Series", ["time series", "trend", "seasonality", "residual", "moving average",
+                         "forecast"]),
+        ("Recommendation Systems", ["recommendation", "collaborative", "content-based"]),
+        ("Analytics & Funnels", ["funnel", "drop off", "checkout", "e-commerce", "cohort"]),
+    ],
+    "data analyst": [
+        ("SQL & Joins", ["sql", "join", "cross join", "window function", "row_number", "rank",
+                         "dense_rank", "lag", "lead", "query", "pivot"]),
+        ("Data Cleaning", ["clean", "data quality", "missing value", "messy data"]),
+        ("Analysis Types", ["descriptive", "diagnostic", "predictive", "prescriptive", "cohort"]),
+        ("Dashboards & Visualization", ["dashboard", "tableau", "power bi", "bar chart", "histogram",
+                                        "box plot", "visualization"]),
+        ("Business Metrics", ["year-over-year", "month-over-month", "growth", "revenue",
+                              "statistical significance", "practical significance",
+                              "moving average", "sma", "ema"]),
+    ],
+    "python developer": [
+        ("Python Internals", ["gil", "threading", "memory management", "reference counting",
+                              "garbage collection", "__slots__", "import system", "sys.path",
+                              "monkey patching", "circular import"]),
+        ("Core Constructs", ["generator", "iterator", "decorator", "metaclass", "args", "kwargs",
+                             "context manager", "contextlib", "dataclass", "namedtuple",
+                             "deepcopy", "shallow copy", "map", "filter", "reduce",
+                             "list comprehension"]),
+        ("Concurrency & Async", ["asyncio", "multiprocessing", "thread"]),
+        ("Profiling & Debugging", ["profile", "memory leak", "debug"]),
+    ],
+    "ui/ux designer": [
+        ("Design Process", ["double diamond", "research", "ideation", "prototyp", "user testing",
+                            "moderated", "unmoderated", "persona"]),
+        ("Design Principles", ["affordance", "fitts", "gestalt", "heuristic", "nielsen",
+                               "accessibility", "wcag", "aria"]),
+        ("Design Systems", ["atomic design", "design system", "wireframe", "mockup", "handoff",
+                            "information architecture"]),
+        ("UX Writing", ["ux writing", "copywriting", "microcopy"]),
+        ("Responsive Design", ["responsive", "adaptive", "fluid", "screen size"]),
+    ],
+    "devops engineer": [
+        ("Docker & Containers", ["docker", "image", "container", "multi-stage"]),
+        ("Kubernetes", ["kubernetes", "k8s", "pod", "ingress", "namespace", "statefulset",
+                        "hpa", "vpa", "cluster autoscaler", "gitops", "argocd", "fluxcd",
+                        "service mesh", "istio", "linkerd", "networking"]),
+        ("CI/CD & Deployments", ["ci/cd", "pipeline", "blue-green", "canary", "rolling",
+                                 "deployment"]),
+        ("Infrastructure as Code", ["terraform", "pulumi", "cloudformation", "iac", "secrets",
+                                    "vault", "sealed secrets"]),
+        ("Observability", ["observability", "logs", "metrics", "traces", "prometheus", "grafana",
+                           "monitoring", "alert"]),
+        ("Reliability & DR", ["disaster recovery", "rto", "rpo", "backup", "circuit breaker",
+                              "retry", "blast radius"]),
+    ],
+}
+
+
+# Generic tech topics — role map miss ho toh ye lagte hain (cross-cutting tech like React/DB/API)
+GENERIC_TOPIC_KEYWORDS = [
+    ("React & Components", ["react", "virtual dom", "usememo", "usecallback", "jsx", "component"]),
+    ("JavaScript Core", ["javascript", "typescript", "closure", "promise", "event loop", "async"]),
+    ("CSS & Styling", ["css", "flexbox", "grid", "sass", "responsive", "styling"]),
+    ("HTML & Browser", ["html", "dom", "browser", "rendering", "cors", "web worker"]),
+    ("Databases", ["database", "sql", "nosql", "mongodb", "postgres", "mysql", "query", "index",
+                   "transaction", "orm", "sharding"]),
+    ("APIs & Backend", ["api", "rest", "graphql", "http", "endpoint", "jwt", "authentication",
+                        "websocket"]),
+    ("System Design & Architecture", ["system design", "microservice", "scal", "architecture",
+                                      "distributed", "message queue", "caching", "load balanc",
+                                      "monolith"]),
+    ("DevOps & Cloud", ["docker", "kubernetes", "ci/cd", "terraform", "aws", "azure", "cloud",
+                        "deploy", "monitoring"]),
+    ("Algorithms & Data Structures", ["algorithm", "complexity", "array", "tree", "graph",
+                                      "sorting", "binary search", "stack", "queue", "heap"]),
+    ("Data & ML", ["machine learning", "model", "training", "neural", "deep learning",
+                   "data science", "statistics", "dataset"]),
+    ("Python", ["python", "django", "flask", "generator", "decorator", "gil"]),
+]
+
+
+def _topic_keyword_hits(keywords, q):
+    """Keyword match with word-boundary at start (prefix match allowed).
+    'dom' 'random' me nahi milega, lekin 'scal' 'scaling' me milega."""
+    try:
+        return any(re.search(r"\b" + re.escape(kw), q) for kw in keywords)
+    except Exception:
+        return any(kw in q for kw in keywords)
+
+
+def _extract_topics(question, role):
+    """Question text se topic labels nikalo — ROLE_TOPIC_KEYWORDS keyword match,
+    phir GENERIC_TOPIC_KEYWORDS fallback. Sab match hoke bhi khali ho toh role naam."""
+    try:
+        q = str(question).lower()
+        role_lower = role.lower()
+        role_key = None
+        for key in ROLE_TOPIC_KEYWORDS:
+            if key in role_lower or role_lower in key:
+                role_key = key
+                break
+
+        topics = []
+        if role_key:
+            for topic, keywords in ROLE_TOPIC_KEYWORDS[role_key]:
+                if _topic_keyword_hits(keywords, q):
+                    topics.append(topic)
+        for topic, keywords in GENERIC_TOPIC_KEYWORDS:
+            if topic in topics:
+                continue
+            if _topic_keyword_hits(keywords, q):
+                topics.append(topic)
+        if not topics:
+            topics = [role.title()]
+        return topics
+    except Exception:
+        return [role.title()]
+
+
+def _get_user_weak_topics(user_id, role):
+    """User ke weak topics {topic: count} — count desc. Khali dict agar koi data nahi."""
+    if not user_id or user_weak_topics_col is None:
+        return {}
+    try:
+        rows = list(user_weak_topics_col.find(
+            {"user_id": user_id, "role": role.lower().strip()},
+            {"topic": 1, "count": 1, "_id": 0}
+        ).sort("count", -1).limit(8))
+        return {r["topic"]: r["count"] for r in rows if r.get("topic")}
+    except Exception:
+        return {}
+
+
+def _record_weak_topics(user_id, role, evals):
+    """Score < 4 waale questions ke topics weak_topics_col me count karo."""
+    if not user_id or user_weak_topics_col is None or not evals:
+        return
+    try:
+        role_lower = role.lower().strip()
+        updates = {}
+        for ev in evals:
+            if not ev:
+                continue
+            score  = ev.get("score", 0)
+            q_text = ev.get("question", "")
+            if score >= 4 or not q_text:
+                continue
+            for topic in _extract_topics(q_text, role):
+                updates[topic] = updates.get(topic, 0) + 1
+
+        now = datetime.utcnow().isoformat()
+        for topic, n in updates.items():
+            user_weak_topics_col.update_one(
+                {"user_id": user_id, "role": role_lower, "topic": topic},
+                {"$inc": {"count": n}, "$set": {"last_weak_at": now}},
+                upsert=True,
+            )
+    except Exception:
+        pass
+
+
+def _get_user_avg_score(user_id):
+    """User ka average interview percentage — difficulty adjustment ke liye."""
+    if not user_id or stats_col is None:
+        return None
+    try:
+        doc = stats_col.find_one({"user_id": user_id}, {"avg_interview_score": 1})
+        return doc.get("avg_interview_score") if doc else None
+    except Exception:
+        return None
+
+
+_DIFFICULTY_PRESETS = [
+    {"label": "1 easy, 3 medium, 4 hard", "mix": {"easy": 1, "medium": 3, "hard": 4}},
+    {"label": "2 easy, 4 medium, 2 hard", "mix": {"easy": 2, "medium": 4, "hard": 2}},
+    {"label": "3 easy, 3 medium, 2 hard", "mix": {"easy": 3, "medium": 3, "hard": 2}},
+]
+
+
+def _pick_difficulty(user_id):
+    """Avg score se difficulty chuno — weak = easy, strong = hard, middle = random."""
+    avg = _get_user_avg_score(user_id)
+    if avg is None:
+        return random.choice(_DIFFICULTY_PRESETS)
+    if avg < 40:
+        return _DIFFICULTY_PRESETS[2]
+    if avg > 70:
+        return _DIFFICULTY_PRESETS[0]
+    return random.choice(_DIFFICULTY_PRESETS)
+
+
 def _HR_FALLBACK_QUESTIONS(role):
     qs = [
         "Tell me about yourself and why you are interested in this role",
@@ -465,13 +1005,59 @@ def _FALLBACK_QUESTIONS(role, round_type="technical"):
     return _TECH_FALLBACK_QUESTIONS(role)
 
 
-def generate_questions(role, round_type="technical", resume_text=None, num_q=8, seed=None):
-    seed = seed or random.randint(1000, 9999)
-    diff = random.choice([
-        "2 easy, 4 medium, 2 hard",
-        "1 easy, 3 medium, 4 hard",
-        "3 easy, 3 medium, 2 hard"
-    ])
+def _generate_hr_questions(num_q=8):
+    """HR core + random pool — standard HR interview questions (repeat allowed)."""
+    hr_core = [
+        "Tell me about yourself and why you are interested in this role",
+        "What are your greatest strengths and weaknesses",
+        "Why should we hire you for this position",
+        "Where do you see yourself in 5 years",
+    ]
+    hr_pool = [
+        "Tell me about a time you demonstrated leadership",
+        "How do you handle stress and pressure at work",
+        "Describe your ideal work environment",
+        "Tell me about a time you failed and what you learned from it",
+        "What motivates you in your professional life",
+        "How do you handle conflict with a teammate or manager",
+        "Tell me about a time you had to meet a tight deadline",
+        "Describe a situation where you went above and beyond",
+        "How do you prioritize tasks when everything feels urgent",
+        "Tell me about a project you are most proud of and why",
+        "Do you have any questions for us about the company or role",
+        "Why are you interested in this company specifically",
+        "How do you handle receiving constructive criticism",
+        "Describe a time you had to adapt to a major change",
+        "What does teamwork mean to you",
+        "Tell me about a time you solved a problem creatively",
+    ]
+    final = hr_core[:min(num_q, len(hr_core))]
+    need  = num_q - len(final)
+    if need > 0:
+        random.shuffle(hr_pool)
+        final = final + hr_pool[:need]
+    return final[:num_q]
+
+
+def _generate_technical_questions(role, num_q=8, seed=None, user_id=None, resume_text=None):
+    """AI prompt → MongoDB fallback → hardcoded fallback. Weak topics prioritized."""
+    if num_q <= 0:
+        return []
+
+    seed       = seed or random.randint(1000, 9999)
+    preset     = _pick_difficulty(user_id)
+    diff       = preset["label"]
+    diff_mix   = preset["mix"]
+    weak_topics = _get_user_weak_topics(user_id, role)
+
+    weak_line = ""
+    if weak_topics:
+        weak_str = ", ".join(f"{t} (x{c})" for t, c in list(weak_topics.items())[:4])
+        weak_line = (
+            "\nThe candidate has previously scored below 4/10 on these topics: "
+            f"{weak_str}. Make sure AT LEAST 2 questions directly test these weak "
+            "topics so the candidate can improve on them."
+        )
 
     role_lower = role.lower()
     role_key = None
@@ -491,67 +1077,16 @@ def generate_questions(role, round_type="technical", resume_text=None, num_q=8, 
             f"Performance optimization techniques for {role}",
         ]
 
-    if round_type == "hr":
-        hr_questions = [
-            "Tell me about yourself and why you are interested in this role",
-            "What are your greatest strengths and weaknesses",
-            "Where do you see yourself in 5 years",
-            "Why should we hire you for this position",
-            "Tell me about a time you demonstrated leadership",
-            "How do you handle stress and pressure at work",
-            "Describe your ideal work environment",
-            "Tell me about a time you failed and what you learned from it",
-            "What motivates you in your professional life",
-            "How do you handle conflict with a teammate or manager",
-            "Tell me about a time you had to meet a tight deadline",
-            "Describe a situation where you went above and beyond",
-            "How do you prioritize tasks when everything feels urgent",
-            "Tell me about a project you are most proud of and why",
-            "Do you have any questions for us about the company or role",
-            "Why are you interested in this company specifically",
-            "How do you handle receiving constructive criticism",
-            "Describe a time you had to adapt to a major change",
-            "What does teamwork mean to you",
-            "Tell me about a time you solved a problem creatively",
-        ]
-        selected_hr = random.sample(hr_questions, min(num_q, len(hr_questions)))
+    selected_topics = random.sample(topic_pool, min(num_q, len(topic_pool)))
 
-        prompt = f"""You are an experienced HR interviewer at a top technology company conducting 
-the HR round of an internship interview.
-
-The candidate is interviewing for: {role}
-Session Seed: {seed}
-
-Generate EXACTLY {num_q} unique HR and behavioral interview questions in English.
-
-IMPORTANT: This is the HR round ONLY. The candidate will face a separate 
-technical round later. Do NOT include ANY technical, coding, or role-specific 
-questions here.
-
-Suggested question areas to cover (pick and adapt as needed):
-{chr(10).join(f"- {q}" for q in selected_hr)}
-
-STRICT RULES:
-- Every single question MUST be behavioral, situational, or motivational
-- ZERO technical questions — no coding, no frameworks, no system design, no domain knowledge
-- Questions must assess: personality, communication skills, culture fit, motivation, teamwork, leadership
-- Questions should be suitable for an internship-level candidate (final year student / fresher)
-- No filler questions — every question must have a clear purpose
-- Questions should feel natural, not robotic — like a real HR conversation
-
-Return ONLY a valid JSON array with no extra text:
-["Question 1?", "Question 2?", ..., "Question {num_q}?"]"""
-    else:
-        selected_topics = random.sample(topic_pool, min(num_q, len(topic_pool)))
-
-        if resume_text:
-            prompt = f"""You are a senior {role} interviewer at a top technology company conducting 
+    if resume_text:
+        prompt = f"""You are a senior {role} interviewer at a top technology company conducting 
 the technical round of an internship interview.
 
 The role: {role}
 Candidate Resume: {resume_text[:1500]}
 Session Seed: {seed}
-Difficulty Distribution: {diff}
+Difficulty Distribution: {diff}{weak_line}
 
 IMPORTANT: This is the TECHNICAL round ONLY. Do NOT include ANY HR, behavioral, 
 or motivational questions. Every question must test pure technical/domain knowledge.
@@ -578,13 +1113,13 @@ STRICT RULES:
 
 Return ONLY a valid JSON array with no extra text:
 ["Question 1?", "Question 2?", ..., "Question {num_q}?"]"""
-        else:
-            prompt = f"""You are a senior {role} interviewer at a top technology company conducting 
+    else:
+        prompt = f"""You are a senior {role} interviewer at a top technology company conducting 
 the technical round of an internship interview.
 
 The role: {role}
 Session Seed: {seed}
-Difficulty Distribution: {diff}
+Difficulty Distribution: {diff}{weak_line}
 
 IMPORTANT: This is the TECHNICAL round ONLY. Do NOT include ANY HR, behavioral, 
 or motivational questions. Every question must test pure technical/domain knowledge.
@@ -612,79 +1147,163 @@ STRICT RULES:
 Return ONLY a valid JSON array with no extra text:
 ["Question 1?", "Question 2?", ..., "Question {num_q}?"]"""
 
-    result = _parse(_gemini(prompt, temp=0.9))
+    seen_by_user = _get_user_seen_questions(user_id)
+
+    result = _parse(_gemini(prompt, temp=0.9, timeout=10, max_tokens=2000))
+    ai_questions = []
     if result and isinstance(result, list):
         seen = set()
-        unique = []
         for q in result:
             key = q.strip().lower() if isinstance(q, str) else str(q).strip().lower()
-            if key not in seen:
-                seen.add(key)
-                unique.append(q)
-        unique = _filter_questions(unique, round_type)
-        if len(unique) >= num_q:
-            return unique[:num_q]
-        pool = _FALLBACK_QUESTIONS(role, round_type)
-        random.shuffle(pool)
-        return (unique + pool)[:num_q]
-    pool = _FALLBACK_QUESTIONS(role, round_type)
+            if not key or key in seen or key in seen_by_user:
+                continue
+            seen.add(key)
+            ai_questions.append(q)
+        ai_questions = _filter_questions(ai_questions, "technical")
+
+        # Gemini Bonus — AI-generated questions ko DB me save karo
+        for q in ai_questions:
+            _save_ai_question_to_db(q, role, "technical", diff)
+
+        if len(ai_questions) >= num_q:
+            return ai_questions[:num_q]
+
+    # MongoDB Fallback — difficulty-balanced, user ke na-dekhe questions
+    fill_needed = num_q - len(ai_questions)
+    mongodb_qs = _get_mongodb_technical_questions(
+        role, fill_needed, difficulty_mix=diff_mix, seen=seen_by_user,
+        prefer_topics=list(weak_topics.keys()),
+    )
+
+    if mongodb_qs:
+        # Asked count update karo
+        for q in mongodb_qs:
+            if "_id" in q:
+                _update_question_asked_count(q["_id"], "question_bank")
+        return (ai_questions + [q["question"] for q in mongodb_qs])[:num_q]
+
+    # Hardcoded Fallback (last resort)
+    pool = _TECH_FALLBACK_QUESTIONS(role)
     random.shuffle(pool)
-    return pool[:num_q]
+    return (ai_questions + pool)[:num_q]
 
 
-# ══════════════════════════════════
-# 2. EVALUATE ANSWER
-# ══════════════════════════════════
-def evaluate_answer(question, answer, role):
-    if not answer or answer.strip() in ["", "[SKIPPED]"]:
-        return {
-            "score":       0,
-            "feedback":    "No answer was provided for this question.",
-            "good_points": "—",
-            "improve":     "You must attempt to answer every question during an interview.",
-            "hint":        "Study this topic thoroughly before your next attempt."
-        }
+def generate_questions(role, round_type="technical", resume_text=None, num_q=8, seed=None, user_id=None):
+    """Round dispatch — hr / technical / mixed (4 HR core + baaki technical)."""
+    if round_type == "hr":
+        final = _generate_hr_questions(num_q)
+        _record_user_questions(user_id, final)
+        return final
 
-    relevance = _tfidf(question, answer)
+    if round_type == "mixed":
+        hr_count = min(6, num_q)
+        hr_qs    = _generate_hr_questions(hr_count)
+        tech_qs  = _generate_technical_questions(
+            role, num_q - hr_count, seed=seed, user_id=user_id, resume_text=resume_text
+        )
+        final = (hr_qs + tech_qs)[:num_q]
+        _record_user_questions(user_id, final)
+        return final
 
-    prompt = f"""You are a strict but fair technical interviewer evaluating an 
-internship candidate's interview response.
+    final = _generate_technical_questions(
+        role, num_q, seed=seed, user_id=user_id, resume_text=resume_text
+    )
+    _record_user_questions(user_id, final)
+    return final
+
+
+def evaluate_answers_batch(qa_list, role):
+    """Saare answers ek hi AI call me evaluate karo — 1 call, 8 evaluations ka JSON array."""
+    if not qa_list:
+        return []
+
+    # Pehle empty/skipped answers ko local score karo (AI call nahi chahiye)
+    evals   = []
+    ai_items = []  # (index, question, answer)
+    for i, item in enumerate(qa_list):
+        question = str(item.get("question", "")).strip()
+        answer   = str(item.get("answer", "")).strip()
+        if not answer or answer in ["[SKIPPED]"]:
+            evals.append({
+                "question":    question,
+                "score":       0,
+                "feedback":    "No answer was provided for this question.",
+                "good_points": "—",
+                "improve":     "You must attempt to answer every question during an interview.",
+                "hint":        "Study this topic thoroughly before your next attempt."
+            })
+        else:
+            ai_items.append((i, question, answer))
+            evals.append(None)
+
+    if ai_items:
+        parts = []
+        for n, (_, q, a) in enumerate(ai_items, 1):
+            parts.append(f"Question {n}: {q}\nAnswer {n}: {a[:800]}")
+        qa_block = "\n\n".join(parts)
+
+        prompt = f"""You are a strict but fair technical interviewer evaluating an
+internship candidate's interview responses.
 
 Role: {role}
-Interview Question: {question}
-Candidate's Answer: {answer}
+Total Questions: {len(ai_items)}
 
-Scoring Criteria:
-- 9-10: Excellent — thorough, accurate, includes examples and depth
-- 7-8:  Good — correct understanding but lacks some depth or examples
-- 5-6:  Average — partially correct, missing key concepts
-- 3-4:  Below Average — mostly vague, incorrect or incomplete
-- 0-2:  Poor — irrelevant or completely incorrect answer
+Evaluate EACH question independently. For EVERY question provide:
+- score: 0 to 10 (9-10 Excellent, 7-8 Good, 5-6 Average, 3-4 Below Average, 0-2 Poor)
+- feedback: 2-3 lines of overall assessment
+- good_points: what the candidate got right
+- improve: what was missing or incorrect
+- hint: what an ideal answer should include
 
-Evaluate the answer and provide structured feedback in English.
-Return ONLY valid JSON with no extra text:
-{{
-  "score": 7,
-  "feedback": "2-3 lines of overall assessment...",
-  "good_points": "What the candidate got right...",
-  "improve": "What was missing or incorrect...",
-  "hint": "What an ideal answer should include..."
-}}"""
+{qa_block}
 
-    result = _parse(_gemini(prompt, temp=0.3))
-    if result:
-        ai    = float(result.get("score", 5))
-        final = round(min(10, max(0, ai * 0.7 + relevance * 10 * 0.3)), 1)
-        result["score"] = final
-        return result
+Return ONLY a valid JSON array with one object per question, in the exact same order:
+[
+  {{"score": 7, "feedback": "...", "good_points": "...", "improve": "...", "hint": "..."}},
+  {{"score": 8, "feedback": "...", "good_points": "...", "improve": "...", "hint": "..."}}
+]"""
 
-    return {
-        "score":       round(min(8, relevance * 10), 1),
-        "feedback":    "Answer has been evaluated.",
-        "good_points": "You made an attempt — that shows confidence.",
-        "improve":     "Try to be more specific with technical details and examples.",
-        "hint":        "Use proper technical terminology and back your answer with examples."
-    }
+        result = _parse(_gemini(prompt, temp=0.3, max_tokens=4000, timeout=20))
+
+        if isinstance(result, list) and result:
+            # Partial result bhi use karo — jo AI ne diya woh lelo, missing pe TF-IDF
+            for n, (idx, q, a) in enumerate(ai_items):
+                r         = result[n] if n < len(result) and isinstance(result[n], dict) else None
+                relevance = _tfidf(q, a)
+                if r:
+                    ai_score = float(r.get("score", 5))
+                    final    = round(min(10, max(0, ai_score + relevance * 3)), 1)
+                    evals[idx] = {
+                        "question":    q,
+                        "score":       final,
+                        "feedback":    str(r.get("feedback", "Answer has been evaluated.")),
+                        "good_points": str(r.get("good_points", "You made an attempt — that shows confidence.")),
+                        "improve":     str(r.get("improve", "Try to be more specific with technical details and examples.")),
+                        "hint":        str(r.get("hint", "Use proper technical terminology and back your answer with examples.")),
+                    }
+                else:
+                    evals[idx] = {
+                        "question":    q,
+                        "score":       round(min(8, max(3.0, relevance * 10)), 1),
+                        "feedback":    "Answer has been evaluated.",
+                        "good_points": "You made an attempt — that shows confidence.",
+                        "improve":     "Try to be more specific with technical details and examples.",
+                        "hint":        "Use proper technical terminology and back your answer with examples.",
+                    }
+        else:
+            # AI fail hua → local TF-IDF scoring (0 extra calls)
+            for idx, q, a in ai_items:
+                relevance = _tfidf(q, a)
+                evals[idx] = {
+                    "question":    q,
+                    "score":       round(min(8, max(3.0, relevance * 10)), 1),
+                    "feedback":    "Answer has been evaluated.",
+                    "good_points": "You made an attempt — that shows confidence.",
+                    "improve":     "Try to be more specific with technical details and examples.",
+                    "hint":        "Use proper technical terminology and back your answer with examples.",
+                }
+
+    return evals
 
 
 # ══════════════════════════════════
@@ -908,29 +1527,116 @@ Return ONLY valid JSON with no extra text:
   "topic": "{topic}"
 }}"""
 
-    result = _parse(_gemini(prompt, temp=0.8))
-    return result or random.choice(_FALLBACK_PROBLEMS(difficulty))
+    result = _parse(_gemini(prompt, temp=0.8, max_tokens=2500))
+
+    # Gemini Bonus — AI-generated coding problem ko DB me save karo
+    if result:
+        _save_ai_coding_to_db(result)
+        return result
+
+    # MongoDB Fallback — least attempted problem
+    mongodb_problem = _get_mongodb_coding_problem(difficulty)
+    if mongodb_problem:
+        return mongodb_problem
+
+    # Hardcoded Fallback (last resort)
+    return random.choice(_FALLBACK_PROBLEMS(difficulty))
 
 
 # ══════════════════════════════════
 # 4. FINAL PERFORMANCE REPORT
 # ══════════════════════════════════
-def generate_report(role, evaluations, total_score, percentage):
+def _readiness_level(percentage):
+    if percentage >= 70:
+        return "Internship Ready"
+    elif percentage >= 55:
+        return "Almost Ready"
+    elif percentage >= 40:
+        return "Needs More Preparation"
+    return "Foundation Required"
+
+
+def _next_steps(percentage, round_type):
+    if round_type == "hr":
+        return [
+            "Practice common HR questions using the STAR method (Situation, Task, Action, Result)",
+            "Work on clear, confident and professional communication",
+            "Prepare a crisp self-introduction and 2-3 achievement stories",
+        ]
+    if round_type == "mixed":
+        return [
+            "Practice HR questions with the STAR method",
+            "Revise core technical concepts for your target role",
+            "Take one mock interview every week and review your feedback",
+        ]
+    return [
+        "Revise core technical concepts for your target role",
+        "Build a small project to strengthen practical skills",
+        "Take one technical mock interview every week",
+    ]
+
+
+def _smart_report(role, evaluations, total_score, percentage, round_type="technical"):
+    """0 API calls — evaluations se personalized report banao (AI fail hone par fallback)."""
+    scored = [e for e in evaluations if e.get("score", 0) > 0]
+    scored.sort(key=lambda e: e.get("score", 0), reverse=True)
+
+    top3    = scored[:3]
+    bottom2 = scored[-2:] if len(scored) >= 2 else scored
+
+    def _line(e):
+        q = str(e.get("question", "")).strip()
+        fb = str(e.get("feedback", "")).strip()
+        base = f"{e['score']}/10"
+        if q:
+            return f"{base} — {q[:75]}"
+        if fb and fb not in ("—",):
+            return f"{base} — {fb[:75]}"
+        return f"{base}"
+
+    strengths  = [_line(e) for e in top3]
+    weaknesses = [_line(e) for e in bottom2]
+
+    if len(evaluations) == 0:
+        mx = 0
+    else:
+        mx = len(evaluations) * 10
+
+    return {
+        "overall_summary": f"You scored {percentage}% ({total_score}/{mx}) across {len(evaluations)} questions in the {role} interview.",
+        "strengths":       strengths or ["Attempted the questions — that's a good start!"],
+        "weaknesses":      weaknesses or ["Review core concepts before your next attempt"],
+        "recommendations": [
+            "Revise the low-scoring topics listed above first",
+            "Practice explaining concepts with real-world examples",
+            "Take one mock interview every week",
+        ],
+        "readiness_score":    int(percentage),
+        "readiness_level":    _readiness_level(percentage),
+        "next_steps":         _next_steps(percentage, round_type),
+        "motivational_message": "Consistent practice pays off — every attempt brings you closer!",
+    }
+
+
+def generate_report(role, evaluations, total_score, percentage, round_type="technical"):
     summary = "\n".join([
         f"Q{i+1}: Score {e.get('score', 0)}/10 — {str(e.get('feedback', ''))[:60]}"
         for i, e in enumerate(evaluations)
     ])
 
     prompt = f"""You are an expert career counselor analyzing the performance 
-of a final-year student in a mock internship interview.
+of a final-year student in a mock {round_type} internship interview.
 
 Applied Role: {role}
+Round Type: {round_type}
 Total Score: {total_score} out of {len(evaluations) * 10} ({percentage}%)
 
 Question-wise Performance Summary:
 {summary}
 
 Provide an honest, constructive, and detailed performance analysis in English.
+Make sure your advice and recommendations match the {round_type} round — for an HR
+round focus on communication, confidence and behavioral answers, not coding bootcamps.
 Return ONLY valid JSON with no extra text:
 {{
   "overall_summary": "2-3 sentences summarizing the overall performance honestly",
@@ -958,17 +1664,13 @@ Return ONLY valid JSON with no extra text:
   "motivational_message": "A short encouraging message for the candidate"
 }}"""
 
-    result = _parse(_gemini(prompt, temp=0.5))
+    result = _parse(_gemini(prompt, temp=0.5, timeout=10, max_tokens=2500))
     if result:
+        # Readiness score/level aur next_steps hamesha ACTUAL performance + round se derive
+        # karo — AI ko 8% par "Internship Ready" jaisa inconsistent data dene se rokta hai.
+        result["readiness_score"] = int(percentage)
+        result["readiness_level"] = _readiness_level(percentage)
+        result["next_steps"]      = _next_steps(percentage, round_type)
         return result
 
-    return {
-        "overall_summary":    "The candidate completed the interview and demonstrated a foundational understanding of the role.",
-        "strengths":          ["Completed all questions", "Showed enthusiasm", "Basic knowledge present"],
-        "weaknesses":         ["Needs more technical depth", "Examples were lacking in answers"],
-        "recommendations":    ["Review core concepts daily", "Build practical projects", "Practice mock interviews regularly"],
-        "readiness_score":    int(percentage),
-        "readiness_level":    "Almost Ready" if percentage > 60 else "Needs More Preparation",
-        "next_steps":         ["Identify and revise weak topics", "Add projects to GitHub", "Apply to internships on Internshala"],
-        "motivational_message": "Keep practicing — consistent effort leads to success!"
-    }
+    return _smart_report(role, evaluations, total_score, percentage, round_type)

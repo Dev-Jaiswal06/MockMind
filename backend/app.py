@@ -87,6 +87,19 @@ def health():
 with app.app_context():
     init_db()
 
+    # ── Auto-seed: agar collections empty hain toh questions daal do ──
+    from models import question_bank_col, coding_problems_col, hr_questions_col
+    if question_bank_col is not None and question_bank_col.count_documents({}) == 0:
+        print("[SEED] Collections empty — seeding fallback questions...")
+        from scripts.seed_fallback import seed
+        seed()
+        print("[SEED] Done!")
+    else:
+        tech = question_bank_col.count_documents({}) if question_bank_col is not None else 0
+        coding = coding_problems_col.count_documents({}) if coding_problems_col is not None else 0
+        hr = hr_questions_col.count_documents({}) if hr_questions_col is not None else 0
+        print(f"[DB] Fallback ready: {tech} tech + {coding} coding + {hr} HR questions")
+
 if __name__ == "__main__":
     print("\n" + "=" * 50)
     print("  MockMind Backend — PID:", os.getpid())

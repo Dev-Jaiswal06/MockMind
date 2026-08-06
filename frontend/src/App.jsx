@@ -19,7 +19,7 @@ import Reports            from "./pages/Reports"
 
 function ThemeInit() {
   useEffect(() => {
-    const saved = localStorage.getItem("mm-theme")
+    const saved = sessionStorage.getItem("mm-theme")
     if (saved === "dark") document.documentElement.classList.add("dark")
     else document.documentElement.classList.remove("dark")
   }, [])
@@ -88,7 +88,8 @@ export default function App() {
             border:"1px solid var(--bdr)",
             borderRadius:"12px",
             boxShadow:"var(--shadow-lg)",
-            fontSize:".88rem"
+            fontSize:"1rem",
+            padding:"14px 18px"
           }
         }}/>
         <AnimatedRoutes/>

@@ -8,20 +8,20 @@
   --card2: rgba(255,255,255,0.6);
   --bdr:   rgba(0,0,0,0.08);
   --bdr2:  rgba(0,0,0,0.12);
-  --p:     #7c3aed;
-  --pl:    #8b5cf6;
-  --s:     #06b6d4;
-  --ok:    #10b981;
+  --p:     #1d4ed8;
+  --pl:    #2563eb;
+  --s:     #f59e0b;
+  --ok:    #16a34a;
   --err:   #ef4444;
   --warn:  #f59e0b;
   --t1:    #0f172a;
   --t2:    #475569;
   --t3:    #94a3b8;
-  --grad:  linear-gradient(135deg,#7c3aed,#06b6d4);
-  --grad2: linear-gradient(135deg,#7c3aed 0%,#a78bfa 50%,#06b6d4 100%);
+  --grad:  linear-gradient(135deg,#1d4ed8,#2563eb);
+  --grad2: linear-gradient(135deg,#1d4ed8 0%,#2563eb 50%,#d97706 100%);
   --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.04);
   --shadow-lg: 0 4px 6px rgba(0,0,0,.05), 0 10px 40px rgba(0,0,0,.08);
-  --shadow-glow: 0 0 30px rgba(124,58,237,.15);
+  --shadow-glow: 0 0 30px rgba(37,99,235,.15);
 }
 
 html.dark {
@@ -32,14 +32,17 @@ html.dark {
   --card2: rgba(255,255,255,0.04);
   --bdr:   rgba(255,255,255,0.10);
   --bdr2:  rgba(255,255,255,0.15);
-  --p:     #8b5cf6;
-  --pl:    #a78bfa;
+  --p:     #60a5fa;
+  --pl:    #93c5fd;
+  --s:     #fbbf24;
   --t1:    #f1f5f9;
   --t2:    #94a3b8;
   --t3:    #475569;
+  --grad:  linear-gradient(135deg,#3b82f6,#2563eb);
+  --grad2: linear-gradient(135deg,#93c5fd 0%,#3b82f6 50%,#fbbf24 100%);
   --shadow: 0 2px 8px rgba(0,0,0,.4), 0 8px 32px rgba(0,0,0,.3);
-  --shadow-lg: 0 8px 16px rgba(0,0,0,.4), 0 16px 48px rgba(0,0,0,.5), 0 0 40px rgba(139,92,246,.08);
-  --shadow-glow: 0 0 40px rgba(139,92,246,.25);
+  --shadow-lg: 0 8px 16px rgba(0,0,0,.4), 0 16px 48px rgba(0,0,0,.5), 0 0 40px rgba(59,130,246,.08);
+  --shadow-glow: 0 0 40px rgba(59,130,246,.25);
 }
 
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -88,7 +91,7 @@ body{
   left:-50%;
   width:200%;
   height:200%;
-  background:conic-gradient(from 180deg,transparent,rgba(139,92,246,.08),transparent 30%);
+  background:conic-gradient(from 180deg,transparent,rgba(37,99,235,.08),transparent 30%);
   animation:rotateBorder 8s linear infinite;
   z-index:0;
 }
@@ -114,13 +117,13 @@ body{
   color:#fff;
   padding:12px 24px;
   font-size:.95rem;
-  box-shadow:0 2px 8px rgba(124,58,237,.25);
+  box-shadow:0 2px 8px rgba(29,78,216,.25);
 }
 .btnp:hover{
   transform:translateY(-2px);
-  box-shadow:0 6px 20px rgba(124,58,237,.35);
+  box-shadow:0 6px 20px rgba(29,78,216,.35);
 }
-.btnp:active{transform:translateY(0);box-shadow:0 2px 8px rgba(124,58,237,.25)}
+.btnp:active{transform:translateY(0);box-shadow:0 2px 8px rgba(29,78,216,.25)}
 .btnp:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
 .btns{
   background:var(--card);
@@ -150,13 +153,13 @@ body{
 }
 .inp:focus{
   border-color:var(--p);
-  box-shadow:0 0 0 3px rgba(124,58,237,.12);
+  box-shadow:0 0 0 3px rgba(29,78,216,.12);
 }
 .inp:focus-visible{
   outline:2px solid var(--p);
   outline-offset:1px;
 }
-.inp.valid-input{border-color:var(--ok);box-shadow:0 0 0 3px rgba(16,185,129,.12)}
+.inp.valid-input{border-color:var(--ok);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
 .inp.invalid-input{border-color:var(--err);box-shadow:0 0 0 3px rgba(239,68,68,.12)}
 .validation-message{font-size:.82rem;margin-top:6px;line-height:1.4;}
 .validation-message.success{color:var(--ok)}
@@ -195,26 +198,26 @@ body{
 .orb-1{
   width:600px;height:600px;
   top:-150px;right:-120px;
-  background:radial-gradient(circle,rgba(124,58,237,.3),transparent 70%);
+  background:radial-gradient(circle,rgba(29,78,216,.3),transparent 70%);
   animation:floatOrb 20s ease-in-out infinite;
 }
 .orb-2{
   width:500px;height:500px;
   bottom:-120px;left:-100px;
-  background:radial-gradient(circle,rgba(6,182,212,.25),transparent 70%);
+  background:radial-gradient(circle,rgba(245,158,11,.25),transparent 70%);
   animation:floatOrb 25s ease-in-out infinite reverse;
 }
 .orb-3{
   width:400px;height:400px;
   top:35%;left:25%;
-  background:radial-gradient(circle,rgba(139,92,246,.15),transparent 70%);
+  background:radial-gradient(circle,rgba(37,99,235,.15),transparent 70%);
   animation:floatOrb 18s ease-in-out infinite 5s;
 }
 
 html.dark .orb{opacity:.5}
-html.dark .orb-1{width:600px;height:600px;background:radial-gradient(circle,rgba(139,92,246,.3),transparent 70%)}
-html.dark .orb-2{width:500px;height:500px;background:radial-gradient(circle,rgba(6,182,212,.22),transparent 70%)}
-html.dark .orb-3{width:400px;height:400px;background:radial-gradient(circle,rgba(139,92,246,.15),transparent 70%)}
+html.dark .orb-1{width:600px;height:600px;background:radial-gradient(circle,rgba(37,99,235,.3),transparent 70%)}
+html.dark .orb-2{width:500px;height:500px;background:radial-gradient(circle,rgba(245,158,11,.22),transparent 70%)}
+html.dark .orb-3{width:400px;height:400px;background:radial-gradient(circle,rgba(37,99,235,.15),transparent 70%)}
 
 @keyframes floatOrb{
   0%,100%{transform:translate(0,0) scale(1)}
@@ -225,7 +228,7 @@ html.dark .orb-3{width:400px;height:400px;background:radial-gradient(circle,rgba
 
 /* ── Animations ── */
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-18px)}}
-@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(139,92,246,.3)}50%{box-shadow:0 0 50px rgba(139,92,246,.6)}}
+@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(37,99,235,.3)}50%{box-shadow:0 0 50px rgba(37,99,235,.6)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
@@ -238,7 +241,7 @@ html.dark .orb-3{width:400px;height:400px;background:radial-gradient(circle,rgba
 
 .fade-up{animation:fadeUp .5s ease}
 .spinner{
-  border:3px solid rgba(139,92,246,.15);
+  border:3px solid rgba(37,99,235,.15);
   border-top:3px solid var(--p);
   border-radius:50%;
   animation:spin .8s linear infinite;
@@ -275,7 +278,7 @@ html.dark .orb-3{width:400px;height:400px;background:radial-gradient(circle,rgba
 .glass::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:4px}
 
 /* ── Selection Color ── */
-::selection{background:rgba(124,58,237,.25);color:var(--t1)}
+::selection{background:rgba(29,78,216,.25);color:var(--t1)}
 
 /* ── Focus Visible for accessibility ── */
 a:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-visible{

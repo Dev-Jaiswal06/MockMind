@@ -60,7 +60,7 @@ The platform addresses a critical gap in interview preparation by offering:
 - AI-generated coding problems based on selected role and difficulty
 - Monaco Editor (VS Code-like) for code writing
 - Support for **5 programming languages**: Python, JavaScript, Java, C++, C
-- Real-time code execution via **Piston API** (free, no key required)
+- Real-time code execution via **Judge0 API** (free cloud instance)
 - Automated test case validation with pass/fail results
 
 ### 📊 Performance Analytics
@@ -79,7 +79,7 @@ The platform addresses a critical gap in interview preparation by offering:
 ---
 
 ## 🏗 System Architecture
-┌─────────────────────────────────────────────────────┐ │ CLIENT LAYER │ │ React.js + Vite (Port 5173) │ │ Landing → Auth → Dashboard → Interview/Coding │ └─────────────────────┬───────────────────────────────┘ │ HTTP / REST API ┌─────────────────────▼───────────────────────────────┐ │ SERVER LAYER │ │ Flask Python (Port 5000) │ │ Auth API │ Interview API │ Coding API │ Reports │ └──────┬──────────────┬───────────────┬───────────────┘ │ │ │ ┌──────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐ │ MongoDB │ │ Google │ │ Piston │ │ Atlas DB │ │ Gemini AI │ │ Code API │ │ (Free) │ │ (Free) │ │ (Free) │ └─────────────┘ └────────────┘ └────────────┘
+┌─────────────────────────────────────────────────────┐ │ CLIENT LAYER │ │ React.js + Vite (Port 5173) │ │ Landing → Auth → Dashboard → Interview/Coding │ └─────────────────────┬───────────────────────────────┘ │ HTTP / REST API ┌─────────────────────▼───────────────────────────────┐ │ SERVER LAYER │ │ Flask Python (Port 5000) │ │ Auth API │ Interview API │ Coding API │ Reports │ └──────┬──────────────┬───────────────┬───────────────┘ │ │ │ ┌──────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐ │ MongoDB │ │ Google │ │ Judge0 │ │ Atlas DB │ │ Gemini AI │ │ Code API │ │ (Free) │ │ (Free) │ │ (Free) │ └─────────────┘ └────────────┘ └────────────┘
 
 text
 
@@ -114,15 +114,15 @@ text
 ### AI & External Services
 | Service | Purpose | Cost |
 |---|---|---|
-| Google Gemini 2.0 Flash | Question Generation & Evaluation | Free |
+| Google Gemini (flash models) | Question Generation & Evaluation | Free |
 | MongoDB Atlas M0 | Cloud Database | Free (512MB) |
-| Piston API | Code Execution | Free (Unlimited) |
+| Judge0 API | Code Execution | Free (50 req / 5 sec) |
 
 ---
 
 ## 📁 Project Structure
 MockMind/ │ ├── 📁 backend/
-│ ├── app.py # Main Flask application │ ├── auth.py # Authentication APIs │ ├── interview.py # Interview module APIs │ ├── coding.py # Coding module APIs │ ├── reports.py # Analytics & reports APIs │ ├── ai_engine.py # Gemini AI integration │ ├── models.py # MongoDB models & helpers │ ├── code_runner.py # Piston API integration │ ├── resume_parser.py # PDF/DOCX resume parser │ ├── config.py # App configuration │ └── requirements.txt # Python dependencies │ ├── 📁 frontend/
+│ ├── app.py # Main Flask application │ ├── auth.py # Authentication APIs │ ├── interview.py # Interview module APIs │ ├── coding.py # Coding module APIs │ ├── reports.py # Analytics & reports APIs │ ├── ai_engine.py # Gemini AI integration │ ├── models.py # MongoDB models & helpers │ ├── code_runner.py # Judge0 API integration │ ├── resume_parser.py # PDF/DOCX resume parser │ ├── config.py # App configuration │ └── requirements.txt # Python dependencies │ ├── 📁 frontend/
 │ └── src/ │ ├── App.jsx # Root component & routing │ ├── index.css # Global styles │ ├── context/ │ │ └── AuthContext.jsx # Authentication context │ ├── utils/ │ │ └── api.js # Axios API instance │ ├── components/ │ │ ├── ProtectedRoute.jsx │ │ └── RobotAnimation.jsx │ └── pages/ │ ├── Landing.jsx # Home page │ ├── Login.jsx │ ├── Signup.jsx │ ├── Dashboard.jsx │ ├── Interview.jsx # Interview module │ ├── Coding.jsx # Coding module │ └── Reports.jsx # Analytics page │ └── README.md
 
 text
@@ -288,7 +288,7 @@ This project is developed as a Final Year Academic Project.
 🙏 Acknowledgements
 Google Gemini AI — AI question generation and evaluation
 MongoDB Atlas — Free cloud database
-Piston API — Free code execution engine
+Judge0 API — Free code execution engine
 Framer Motion — Animation library
 Recharts — Chart components
 <div align="center">
