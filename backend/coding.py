@@ -3,7 +3,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import coding_col, update_user_stats
-from ai_engine import generate_coding_problem, _update_coding_attempted
+from ai_engine import generate_coding_problem, generate_coding_problems, _update_coding_attempted
 from code_runner import run_with_piston
 from driver_code import wrap_with_driver, normalize_output
 from datetime import datetime
@@ -30,7 +30,16 @@ def health_check():
 @jwt_required()
 def get_problem():
     diff = request.args.get("difficulty", "medium")
-    return jsonify({"problem": generate_coding_problem(diff)})
+    try:
+        count = int(request.args.get("count", "1"))
+    except ValueError:
+        count = 1
+
+    problems = generate_coding_problems("fullstack", diff, count=count)
+    response = {"problems": problems}
+    if problems:
+        response["problem"] = problems[0]
+    return jsonify(response)
 
 
 @coding_bp.route("/api/coding/run-cases", methods=["POST"])

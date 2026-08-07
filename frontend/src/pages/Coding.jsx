@@ -1,5 +1,5 @@
 // frontend/src/pages/Coding.jsx
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Editor                  from "@monaco-editor/react"
 import API                     from "../utils/api"
 import toast                   from "react-hot-toast"
@@ -34,46 +34,86 @@ function getStatusStyle(status) {
   return STATUS_STYLES[status] || STATUS_STYLES["Error"]
 }
 
+function stripFunctionSignature(description, functionSignature) {
+  if (!description) return ""
+
+  let result = description
+  if (functionSignature) {
+    const signatures = Array.isArray(functionSignature)
+      ? functionSignature
+      : Object.values(functionSignature)
+    signatures.forEach(sig => {
+      if (!sig) return
+      result = result.split(sig).join("")
+    })
+  }
+
+  const pattern = /^\s*(def\s+solution\(|function\s+solution\(|public\s+.*\s+solution\(|vector<.*\s+solution\(|int\*\s+solution\(|bool\s+solution\(|string\s+solution\(|char\*\s+solution\(|int\s+solution\(|class\s+Solution|function_signature|function signature|`{3}|<code>|<pre>)/i
+
+  const lines = result.split("\n")
+  const cleaned = []
+  lines.forEach(line => {
+    const trimmed = line.trim()
+    if (trimmed === "") {
+      cleaned.push("")
+      return
+    }
+    if (pattern.test(trimmed)) {
+      return
+    }
+    cleaned.push(line)
+  })
+
+  return cleaned
+    .join("\n")
+    .replace(/\n{2,}/g, "\n\n")
+    .trim()
+}
+
 export default function Coding() {
   // ── State ──
-  const [problem,    setProblem]    = useState(null)
-  const [code,       setCode]       = useState("")
-  const [language,   setLanguage]   = useState("python")
-  const [difficulty, setDifficulty] = useState("medium")
-  const [runResults, setRunResults] = useState(null)
-  const [results,    setResults]    = useState(null)
-  const [loading,    setLoading]    = useState(false)
-  const [running,    setRunning]    = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [activeTab,  setActiveTab]  = useState("problem")
-  const fetched = useRef(false)
+  const [problems,      setProblems]      = useState([])
+  const [currentIndex,   setCurrentIndex]   = useState(0)
+  const [problem,        setProblem]        = useState(null)
+  const [code,           setCode]           = useState("")
+  const [language,       setLanguage]       = useState("python")
+  const [difficulty,     setDifficulty]     = useState("medium")
+  const [runResults,     setRunResults]     = useState(null)
+  const [results,        setResults]        = useState(null)
+  const [loading,        setLoading]        = useState(false)
+  const [running,        setRunning]        = useState(false)
+  const [submitting,     setSubmitting]     = useState(false)
 
   // ── Fetch new problem ──
-  const fetchProblem = useCallback(async () => {
+  const fetchProblems = useCallback(async () => {
     setLoading(true)
     setResults(null)
     setRunResults(null)
     try {
       const res = await API.get("/api/coding/problem", {
-        params: { difficulty }
+        params: { difficulty, count: 20 }
       })
-      const p = res.data.problem
-      setProblem(p)
-      setCode(p.starter_code?.[language] || "# Write your code here\n")
-      toast.success("New problem loaded!")
+      const loaded = res.data.problems || (res.data.problem ? [res.data.problem] : [])
+      if (!loaded.length) {
+        toast.error("No problems were returned. Please try again.")
+        return
+      }
+
+      setProblems(loaded)
+      setCurrentIndex(0)
+      setProblem(loaded[0])
+      setCode(loaded[0].starter_code?.[language] || "# Write your code here\n")
+      toast.success(`Loaded ${loaded.length} problem${loaded.length === 1 ? "" : "s"} for this difficulty.`)
     } catch {
-      toast.error("Failed to load problem. Please try again.")
+      toast.error("Failed to load problems. Please try again.")
     } finally {
       setLoading(false)
     }
   }, [difficulty, language])
 
-  // ── Load problem on mount ──
   useEffect(() => {
-    if (fetched.current) return
-    fetched.current = true
-    fetchProblem()
-  }, [fetchProblem])
+    fetchProblems()
+  }, [difficulty])
   
   // ── When language changes update starter code ──
   const handleLanguageChange = (lang) => {
@@ -81,6 +121,28 @@ export default function Coding() {
     if (problem?.starter_code?.[lang]) {
       setCode(problem.starter_code[lang])
     }
+  }
+
+  const handlePreviousProblem = () => {
+    if (currentIndex <= 0 || !problems.length) return
+    const nextIndex = currentIndex - 1
+    setCurrentIndex(nextIndex)
+    const p = problems[nextIndex]
+    setProblem(p)
+    setCode(p.starter_code?.[language] || "# Write your code here\n")
+    setRunResults(null)
+    setResults(null)
+  }
+
+  const handleNextProblem = () => {
+    if (currentIndex >= problems.length - 1 || !problems.length) return
+    const nextIndex = currentIndex + 1
+    setCurrentIndex(nextIndex)
+    const p = problems[nextIndex]
+    setProblem(p)
+    setCode(p.starter_code?.[language] || "# Write your code here\n")
+    setRunResults(null)
+    setResults(null)
   }
 
   // ── Run code against example test cases ──
@@ -92,7 +154,6 @@ export default function Coding() {
     if (!problem) return
     setRunning(true)
     setRunResults(null)
-    setActiveTab("run")
     try {
       const res = await API.post("/api/coding/run-cases", {
         code,
@@ -125,7 +186,6 @@ export default function Coding() {
     if (!problem) return
     setSubmitting(true)
     setResults(null)
-    setActiveTab("submit")
     try {
       const res = await API.post("/api/coding/submit", {
         code,
@@ -185,6 +245,11 @@ export default function Coding() {
             </div>
             <div style={{ fontSize: ".75rem", color: "var(--t2)" }}>
               MockMind — AI Coding Challenge
+              {problems.length > 0 && (
+                <span style={{ marginLeft: "10px", opacity: 0.8 }}>
+                  ({currentIndex + 1}/{problems.length})
+                </span>
+              )}
             </div>
           </div>
           {/* Difficulty badge */}
@@ -224,47 +289,48 @@ export default function Coding() {
             ))}
           </select>
 
-          {/* New Problem button */}
+          {/* Language selector */}
+          <select
+            value={language}
+            onChange={e => handleLanguageChange(e.target.value)}
+            className="inp"
+            style={{
+              width:     "auto",
+              padding:   "6px 10px",
+              fontSize:  ".82rem",
+              cursor:    "pointer",
+              borderRadius: "8px"
+            }}
+          >
+            {LANGUAGES.map(lang => (
+              <option key={lang.id} value={lang.id}>{lang.label}</option>
+            ))}
+          </select>
+
           <button
-            onClick={fetchProblem}
+            onClick={handlePreviousProblem}
+            disabled={currentIndex <= 0}
             className="btn btns"
             style={{ padding: "7px 14px", fontSize: ".82rem" }}
           >
-            🔄 New Problem
+            ◀️ Prev
           </button>
 
-          {/* Run button */}
           <button
-            onClick={handleRun}
-            disabled={running || submitting}
-            className="btn"
-            style={{
-              background:   "rgba(22,163,74,.15)",
-              border:       "1px solid rgba(22,163,74,.4)",
-              color:        "#16a34a",
-              padding:      "7px 16px",
-              fontSize:     ".82rem",
-              fontWeight:   700,
-              opacity:      (running || submitting) ? 0.5 : 1,
-              cursor:       (running || submitting) ? "not-allowed" : "pointer"
-            }}
+            onClick={handleNextProblem}
+            disabled={currentIndex >= problems.length - 1}
+            className="btn btns"
+            style={{ padding: "7px 14px", fontSize: ".82rem" }}
           >
-            {running ? "⏳ Running..." : "▶️ Run"}
+            Next ▶️
           </button>
 
-          {/* Submit button */}
           <button
-            onClick={handleSubmit}
-            disabled={submitting || running}
-            className="btn btnp"
-            style={{
-              padding:  "7px 16px",
-              fontSize: ".82rem",
-              opacity:  (submitting || running) ? 0.5 : 1,
-              cursor:   (submitting || running) ? "not-allowed" : "pointer"
-            }}
+            onClick={fetchProblems}
+            className="btn btns"
+            style={{ padding: "7px 14px", fontSize: ".82rem" }}
           >
-            {submitting ? "⏳ Submitting..." : "🚀 Submit"}
+            🔄 Refresh Batch
           </button>
         </div>
       </div>
@@ -282,97 +348,42 @@ export default function Coding() {
           background:  "var(--card)",
           borderRadius: "0 16px 16px 0"
         }}>
-          {/* Tabs */}
+          {/* Problem header */}
           <div style={{
-            display:     "flex",
-            borderBottom: "1px solid var(--bdr)",
-            background:  "var(--bg2)"
+            display:        "flex",
+            alignItems:     "center",
+            justifyContent: "space-between",
+            borderBottom:   "1px solid var(--bdr)",
+            background:     "var(--bg2)",
+            padding:        "12px 20px"
           }}>
-            {["problem", "run", "submit"].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  padding:     "10px 18px",
-                  border:      "none",
-                  background:  "transparent",
-                  color:       activeTab === tab ? "var(--pl)" : "var(--t2)",
-                  borderBottom: activeTab === tab ? "2px solid var(--p)" : "2px solid transparent",
-                  cursor:      "pointer",
-                  fontSize:    ".85rem",
-                  fontWeight:  600,
-                  textTransform: "capitalize",
-                  position:    "relative"
-                }}
-              >
-                {tab === "problem"  ? "📋 Problem"  : ""}
-                {tab === "run"      ? "▶️ Run"       : ""}
-                {tab === "submit"   ? "🧪 Submit"   : ""}
-                {/* Badge showing result count */}
-                {tab === "submit" && results && (
-                  <span style={{
-                    position:    "absolute",
-                    top:         "4px",
-                    right:       "4px",
-                    background:  results.all_passed ? "#16a34a" : "#ef4444",
-                    color:       "#fff",
-                    fontSize:    ".6rem",
-                    fontWeight:  700,
-                    borderRadius: "50%",
-                    width:       "16px",
-                    height:      "16px",
-                    display:     "flex",
-                    alignItems:  "center",
-                    justifyContent: "center"
-                  }}>
-                    {results.passed}/{results.total}
-                  </span>
-                )}
-              </button>
-            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "1rem", fontWeight: 700 }}>📋 Problem</span>
+              {results?.all_passed && (
+                <span style={{
+                  fontSize: ".8rem",
+                  color: "#16a34a",
+                  background: "rgba(22,163,74,.12)",
+                  border: "1px solid rgba(22,163,74,.25)",
+                  borderRadius: "12px",
+                  padding: "4px 10px"
+                }}>
+                  Last submit passed {results.passed}/{results.total}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Tab Content */}
           <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
-
-            {/* ── Problem Tab ── */}
-            {activeTab === "problem" && problem && (
+            {problem && (
               <div>
                 <h2 style={{ fontSize: "1.2rem", fontWeight: 800, marginBottom: "12px" }}>
                   {problem.title}
                 </h2>
 
                 <p style={{ color: "var(--t2)", lineHeight: 1.7, marginBottom: "20px", fontSize: ".9rem" }}>
-                  {problem.description}
+                  {stripFunctionSignature(problem.description, problem.function_signature)}
                 </p>
-
-                {/* Function Signature — LeetCode style */}
-                {problem.function_signature?.[language] && (
-                  <div style={{
-                    background:   "rgba(22,163,74,.06)",
-                    border:       "1px solid rgba(22,163,74,.25)",
-                    borderRadius: "10px",
-                    padding:      "14px",
-                    marginBottom: "20px"
-                  }}>
-                    <div style={{
-                      fontSize: ".75rem", color: "var(--t2)",
-                      marginBottom: "8px", fontWeight: 600,
-                      textTransform: "uppercase", letterSpacing: ".5px"
-                    }}>
-                      Function Signature
-                    </div>
-                    <pre style={{
-                      margin: 0,
-                      fontFamily: "JetBrains Mono, Fira Code, monospace",
-                      fontSize: ".85rem",
-                      color: "#2563eb",
-                      whiteSpace: "pre-wrap"
-                    }}>
-                      {problem.function_signature[language]}
-                    </pre>
-                  </div>
-                )}
 
                 {/* Examples */}
                 <h4 style={{ marginBottom: "10px", fontSize: ".9rem", color: "var(--pl)" }}>
@@ -492,408 +503,329 @@ export default function Coding() {
               </div>
             )}
 
-            {/* ── Run Tab (Example Test Cases) ── */}
-            {activeTab === "run" && (
-              <div>
-                <h3 style={{ marginBottom: "14px", fontSize: ".95rem" }}>▶️ Example Test Cases</h3>
-                {running ? (
-                  <div style={{
-                    display:       "flex",
-                    flexDirection: "column",
-                    alignItems:    "center",
-                    justifyContent:"center",
-                    gap:           "16px",
-                    padding:       "40px 0",
-                    color:         "var(--t2)"
-                  }}>
-                    <div className="spinner" style={{ width: 36, height: 36 }}/>
-                    <div style={{ fontSize: ".9rem", fontWeight: 600 }}>Running example cases...</div>
-                    <div style={{ fontSize: ".78rem", color: "var(--t2)", opacity: 0.7 }}>
-                      Testing against visible examples
-                    </div>
-                  </div>
-                ) : runResults ? (
-                  <div>
-                    {/* Overall badge */}
-                    <div style={{
-                      display:      "inline-flex",
-                      alignItems:   "center",
-                      gap:          "6px",
-                      background:   runResults.all_passed ? "rgba(22,163,74,.12)" : "rgba(239,68,68,.12)",
-                      border:       `1px solid ${runResults.all_passed ? "#16a34a" : "#ef4444"}`,
-                      color:        runResults.all_passed ? "#16a34a" : "#ef4444",
-                      borderRadius: "8px",
-                      padding:      "5px 14px",
-                      fontSize:     ".8rem",
-                      fontWeight:   700,
-                      marginBottom: "16px"
-                    }}>
-                      {runResults.all_passed ? "✅" : "❌"}
-                      {runResults.passed}/{runResults.total} Example Cases Passed
-                    </div>
-
-                    {/* Individual results */}
-                    {runResults.results?.map((tc, i) => {
-                      const tcStyle = getStatusStyle(tc.status)
-                      return (
-                        <div key={i} style={{
-                          padding:       "14px",
-                          borderRadius:  "10px",
-                          background:    tcStyle.bg,
-                          border:        `1px solid ${tcStyle.border}33`,
-                          marginBottom:  "10px"
-                        }}>
-                          <div style={{
-                            display:        "flex",
-                            justifyContent: "space-between",
-                            alignItems:     "center",
-                            marginBottom:   "10px"
-                          }}>
-                            <span style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--t1)" }}>
-                              Example {tc.test_case}
-                            </span>
-                            <span style={{
-                              color:      tcStyle.color,
-                              fontWeight: 700,
-                              fontSize:   ".78rem",
-                              background: `${tcStyle.border}15`,
-                              padding:    "3px 10px",
-                              borderRadius: "20px",
-                              border:     `1px solid ${tcStyle.border}44`
-                            }}>
-                              {tc.passed ? "✅ PASSED" : `❌ ${tc.status}`}
-                            </span>
-                          </div>
-
-                          {tc.input && (
-                            <div style={{ marginBottom: "6px" }}>
-                              <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
-                                Input:
-                              </div>
-                              <code style={{
-                                display: "block", background: "rgba(0,0,0,.2)",
-                                padding: "8px 10px", borderRadius: "6px",
-                                fontSize: ".8rem", color: "#93c5fd",
-                                whiteSpace: "pre-wrap", wordBreak: "break-all"
-                              }}>
-                                {tc.input || "(empty)"}
-                              </code>
-                            </div>
-                          )}
-
-                          <div style={{ marginBottom: "6px" }}>
-                            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
-                              Expected:
-                            </div>
-                            <code style={{
-                              display: "block", background: "rgba(0,0,0,.2)",
-                              padding: "8px 10px", borderRadius: "6px",
-                              fontSize: ".8rem", color: "#16a34a",
-                              whiteSpace: "pre-wrap", wordBreak: "break-all"
-                            }}>
-                              {tc.expected || "(empty)"}
-                            </code>
-                          </div>
-
-                          <div style={{ marginBottom: "6px" }}>
-                            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
-                              Your Output:
-                            </div>
-                            <code style={{
-                              display: "block", background: "rgba(0,0,0,.2)",
-                              padding: "8px 10px", borderRadius: "6px",
-                              fontSize: ".8rem",
-                              color: tc.passed ? "#16a34a" : "#ef4444",
-                              whiteSpace: "pre-wrap", wordBreak: "break-all"
-                            }}>
-                              {tc.got || "(no output)"}
-                            </code>
-                          </div>
-
-                          {tc.error_message && (
-                            <div style={{ marginTop: "8px" }}>
-                              <div style={{ fontSize: ".75rem", color: "#ef4444", marginBottom: "3px", fontWeight: 600 }}>
-                                Error:
-                              </div>
-                              <pre style={{
-                                background: "rgba(239,68,68,.06)",
-                                border: "1px solid rgba(239,68,68,.25)",
-                                borderRadius: "6px", padding: "8px 10px",
-                                fontSize: ".78rem", color: "#fca5a5",
-                                whiteSpace: "pre-wrap", wordBreak: "break-word",
-                                maxHeight: "150px", overflow: "auto"
-                              }}>
-                                {tc.error_message}
-                              </pre>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div style={{
-                    display: "flex", flexDirection: "column",
-                    alignItems: "center", justifyContent: "center",
-                    padding: "40px 0", color: "var(--t2)", gap: "8px"
-                  }}>
-                    <span style={{ fontSize: "2rem", opacity: 0.3 }}>▶️</span>
-                    <p style={{ fontSize: ".9rem" }}>
-                      Click <strong>"▶️ Run"</strong> to test against example cases.
-                    </p>
-                    <p style={{ fontSize: ".78rem", opacity: 0.6 }}>
-                      Results for each visible example will appear here.
-                    </p>
-                  </div>
-                )}
+            {running ? (
+              <div style={{
+                display:       "flex",
+                flexDirection: "column",
+                alignItems:    "center",
+                justifyContent:"center",
+                gap:           "16px",
+                padding:       "40px 0",
+                color:         "var(--t2)"
+              }}>
+                <div className="spinner" style={{ width: 36, height: 36 }}/>
+                <div style={{ fontSize: ".9rem", fontWeight: 600 }}>Running example cases...</div>
+                <div style={{ fontSize: ".78rem", color: "var(--t2)", opacity: 0.7 }}>
+                  Testing against visible examples
+                </div>
               </div>
-            )}
-
-            {/* ── Submit Tab (Hidden Test Cases) ── */}
-            {activeTab === "submit" && (
+            ) : runResults ? (
               <div>
-                <h3 style={{ marginBottom: "14px", fontSize: ".95rem" }}>🧪 Hidden Test Cases</h3>
-                {submitting ? (
-                  <div style={{
-                    display:       "flex",
-                    flexDirection: "column",
-                    alignItems:    "center",
-                    justifyContent:"center",
-                    gap:           "16px",
-                    padding:       "40px 0",
-                    color:         "var(--t2)"
-                  }}>
-                    <div className="spinner" style={{ width: 36, height: 36 }}/>
-                    <div style={{ fontSize: ".9rem", fontWeight: 600 }}>Running test cases...</div>
-                    <div style={{ fontSize: ".78rem", color: "var(--t2)", opacity: 0.7 }}>
-                      Executing against all test cases
-                    </div>
-                  </div>
-                ) : results ? (
-                  <div>
-                    {/* Overall Score Card */}
-                    <div style={{
-                      display:       "flex",
-                      alignItems:    "center",
-                      gap:           "16px",
-                      marginBottom:  "20px",
-                      padding:       "18px",
-                      borderRadius:  "12px",
-                      background:    results.all_passed ? "rgba(22,163,74,.08)" : "rgba(239,68,68,.08)",
-                      border:        `1px solid ${results.all_passed ? "#16a34a" : "#ef4444"}`
+                <div style={{
+                  display:      "inline-flex",
+                  alignItems:   "center",
+                  gap:          "6px",
+                  background:   runResults.all_passed ? "rgba(22,163,74,.12)" : "rgba(239,68,68,.12)",
+                  border:       `1px solid ${runResults.all_passed ? "#16a34a" : "#ef4444"}`,
+                  color:        runResults.all_passed ? "#16a34a" : "#ef4444",
+                  borderRadius: "8px",
+                  padding:      "5px 14px",
+                  fontSize:     ".8rem",
+                  fontWeight:   700,
+                  marginBottom: "16px"
+                }}>
+                  {runResults.all_passed ? "✅" : "❌"}
+                  {runResults.passed}/{runResults.total} Example Cases Passed
+                </div>
+
+                {runResults.results?.map((tc, i) => {
+                  const tcStyle = getStatusStyle(tc.status)
+                  return (
+                    <div key={i} style={{
+                      padding:       "14px",
+                      borderRadius:  "10px",
+                      background:    tcStyle.bg,
+                      border:        `1px solid ${tcStyle.border}33`,
+                      marginBottom:  "10px"
                     }}>
-                      {/* Score circle */}
                       <div style={{
-                        width:         "60px",
-                        height:        "60px",
-                        borderRadius:  "50%",
-                        border:        `3px solid ${results.all_passed ? "#16a34a" : "#ef4444"}`,
-                        display:       "flex",
-                        flexDirection: "column",
-                        alignItems:    "center",
-                        justifyContent:"center",
-                        flexShrink:    0
+                        display:        "flex",
+                        justifyContent: "space-between",
+                        alignItems:     "center",
+                        marginBottom:   "10px"
                       }}>
-                        <div style={{
-                          fontWeight: 800,
-                          fontSize:   "1.1rem",
-                          lineHeight: 1,
-                          color:      results.all_passed ? "#16a34a" : "#ef4444"
+                        <span style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--t1)" }}>
+                          Example {tc.test_case}
+                        </span>
+                        <span style={{
+                          color:      tcStyle.color,
+                          fontWeight: 700,
+                          fontSize:   ".78rem",
+                          background: `${tcStyle.border}15`,
+                          padding:    "3px 10px",
+                          borderRadius: "20px",
+                          border:     `1px solid ${tcStyle.border}44`
                         }}>
-                          {Math.round(results.score)}%
-                        </div>
+                          {tc.passed ? "✅ PASSED" : `❌ ${tc.status}`}
+                        </span>
                       </div>
-                      <div>
-                        <div style={{
-                          fontWeight: 800,
-                          fontSize:   "1rem",
-                          color:      results.all_passed ? "#16a34a" : "#ef4444"
-                        }}>
-                          {results.passed} / {results.total} Test Cases Passed
-                        </div>
-                        <div style={{ fontSize: ".8rem", color: "var(--t2)", marginTop: "2px" }}>
-                          {results.overall_status || (results.all_passed ? "All Passed" : "Some Failed")}
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Individual test cases */}
-                    {results.results?.map((tc, i) => {
-                      const tcStyle = getStatusStyle(tc.status)
-                      return (
-                        <div key={i} style={{
-                          padding:       "14px",
-                          borderRadius:  "10px",
-                          background:    tcStyle.bg,
-                          border:        `1px solid ${tcStyle.border}33`,
-                          marginBottom:  "10px"
-                        }}>
-                          {/* Header row */}
-                          <div style={{
-                            display:        "flex",
-                            justifyContent: "space-between",
-                            alignItems:     "center",
-                            marginBottom:   "10px"
+                      {tc.input && (
+                        <div style={{ marginBottom: "6px" }}>
+                          <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                            Input:
+                          </div>
+                          <code style={{
+                            display: "block", background: "rgba(0,0,0,.2)",
+                            padding: "8px 10px", borderRadius: "6px",
+                            fontSize: ".8rem", color: "#93c5fd",
+                            whiteSpace: "pre-wrap", wordBreak: "break-all"
                           }}>
-                            <span style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--t1)" }}>
-                              Test Case {tc.test_case}
-                            </span>
-                            <span style={{
-                              color:      tcStyle.color,
-                              fontWeight: 700,
-                              fontSize:   ".78rem",
-                              background: `${tcStyle.border}15`,
-                              padding:    "3px 10px",
-                              borderRadius: "20px",
-                              border:     `1px solid ${tcStyle.border}44`
-                            }}>
-                              {tc.passed ? "✅ PASSED" : `❌ ${tc.status}`}
-                            </span>
-                          </div>
-
-                          {/* Input */}
-                          {tc.input && (
-                            <div style={{ marginBottom: "6px" }}>
-                              <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
-                                Input:
-                              </div>
-                              <code style={{
-                                display:     "block",
-                                background:  "rgba(0,0,0,.2)",
-                                padding:     "8px 10px",
-                                borderRadius: "6px",
-                                fontSize:    ".8rem",
-                                color:       "#93c5fd",
-                                whiteSpace:  "pre-wrap",
-                                wordBreak:   "break-all"
-                              }}>
-                                {tc.input || "(empty)"}
-                              </code>
-                            </div>
-                          )}
-
-                          {/* Expected */}
-                          <div style={{ marginBottom: "6px" }}>
-                            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
-                              Expected Output:
-                            </div>
-                            <code style={{
-                              display:     "block",
-                              background:  "rgba(0,0,0,.2)",
-                              padding:     "8px 10px",
-                              borderRadius: "6px",
-                              fontSize:    ".8rem",
-                              color:       "#16a34a",
-                              whiteSpace:  "pre-wrap",
-                              wordBreak:   "break-all"
-                            }}>
-                              {tc.expected || "(empty)"}
-                            </code>
-                          </div>
-
-                          {/* Got */}
-                          <div style={{ marginBottom: "6px" }}>
-                            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
-                              Your Output:
-                            </div>
-                            <code style={{
-                              display:     "block",
-                              background:  "rgba(0,0,0,.2)",
-                              padding:     "8px 10px",
-                              borderRadius: "6px",
-                              fontSize:    ".8rem",
-                              color:       tc.passed ? "#16a34a" : "#ef4444",
-                              whiteSpace:  "pre-wrap",
-                              wordBreak:   "break-all"
-                            }}>
-                              {tc.got || "(no output)"}
-                            </code>
-                          </div>
-
-                          {/* Error Message */}
-                          {tc.error_message && (
-                            <div style={{ marginTop: "8px" }}>
-                              <div style={{ fontSize: ".75rem", color: "#ef4444", marginBottom: "3px", fontWeight: 600 }}>
-                                Error Details:
-                              </div>
-                              <pre style={{
-                                background:  "rgba(239,68,68,.06)",
-                                border:      "1px solid rgba(239,68,68,.25)",
-                                borderRadius:"6px",
-                                padding:     "8px 10px",
-                                fontSize:    ".78rem",
-                                color:       "#fca5a5",
-                                whiteSpace:  "pre-wrap",
-                                wordBreak:   "break-word",
-                                maxHeight:   "150px",
-                                overflow:    "auto"
-                              }}>
-                                {tc.error_message}
-                              </pre>
-                            </div>
-                          )}
+                            {tc.input || "(empty)"}
+                          </code>
                         </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div style={{
-                    display:        "flex",
-                    flexDirection:  "column",
-                    alignItems:     "center",
-                    justifyContent: "center",
-                    padding:        "40px 0",
-                    color:          "var(--t2)",
-                    gap:            "8px"
-                  }}>
-                    <span style={{ fontSize: "2rem", opacity: 0.3 }}>🧪</span>
-                    <p style={{ fontSize: ".9rem" }}>
-                      Click <strong>"🚀 Submit"</strong> to run against hidden test cases.
-                    </p>
-                    <p style={{ fontSize: ".78rem", opacity: 0.6 }}>
-                      Detailed results with input, expected &amp; actual output will appear here.
-                    </p>
-                  </div>
-                )}
+                      )}
+
+                      <div style={{ marginBottom: "6px" }}>
+                        <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                          Expected:
+                        </div>
+                        <code style={{
+                          display: "block", background: "rgba(0,0,0,.2)",
+                          padding: "8px 10px", borderRadius: "6px",
+                          fontSize: ".8rem", color: "#16a34a",
+                          whiteSpace: "pre-wrap", wordBreak: "break-all"
+                        }}>
+                          {tc.expected || "(empty)"}
+                        </code>
+                      </div>
+
+                      <div style={{ marginBottom: "6px" }}>
+                        <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                          Your Output:
+                        </div>
+                        <code style={{
+                          display: "block", background: "rgba(0,0,0,.2)",
+                          padding: "8px 10px", borderRadius: "6px",
+                          fontSize: ".8rem",
+                          color: tc.passed ? "#16a34a" : "#ef4444",
+                          whiteSpace: "pre-wrap", wordBreak: "break-all"
+                        }}>
+                          {tc.got || "(no output)"}
+                        </code>
+                      </div>
+
+                      {tc.error_message && (
+                        <div style={{ marginTop: "8px" }}>
+                          <div style={{ fontSize: ".75rem", color: "#ef4444", marginBottom: "3px", fontWeight: 600 }}>
+                            Error:
+                          </div>
+                          <pre style={{
+                            background: "rgba(239,68,68,.06)",
+                            border: "1px solid rgba(239,68,68,.25)",
+                            borderRadius: "6px", padding: "8px 10px",
+                            fontSize: ".78rem", color: "#fca5a5",
+                            whiteSpace: "pre-wrap", wordBreak: "break-word",
+                            maxHeight: "150px", overflow: "auto"
+                          }}>
+                            {tc.error_message}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            )}
+            ) : null}
+
+            {submitting ? (
+              <div style={{
+                display:       "flex",
+                flexDirection: "column",
+                alignItems:    "center",
+                justifyContent:"center",
+                gap:           "16px",
+                padding:       "40px 0",
+                color:         "var(--t2)"
+              }}>
+                <div className="spinner" style={{ width: 36, height: 36 }}/>
+                <div style={{ fontSize: ".9rem", fontWeight: 600 }}>Running test cases...</div>
+                <div style={{ fontSize: ".78rem", color: "var(--t2)", opacity: 0.7 }}>
+                  Executing against all test cases
+                </div>
+              </div>
+            ) : results ? (
+              <div>
+                <div style={{
+                  display:      "inline-flex",
+                  alignItems:   "center",
+                  gap:          "6px",
+                  background:   results.all_passed ? "rgba(22,163,74,.12)" : "rgba(239,68,68,.12)",
+                  border:       `1px solid ${results.all_passed ? "#16a34a" : "#ef4444"}`,
+                  color:        results.all_passed ? "#16a34a" : "#ef4444",
+                  borderRadius: "8px",
+                  padding:      "5px 14px",
+                  fontSize:     ".8rem",
+                  fontWeight:   700,
+                  marginBottom: "16px"
+                }}>
+                  {results.all_passed ? "✅" : "❌"}
+                  {results.passed}/{results.total} Test Cases Passed
+                </div>
+
+                {results.results?.map((tc, i) => {
+                  const tcStyle = getStatusStyle(tc.status)
+                  return (
+                    <div key={i} style={{
+                      padding:       "14px",
+                      borderRadius:  "10px",
+                      background:    tcStyle.bg,
+                      border:        `1px solid ${tcStyle.border}33`,
+                      marginBottom:  "10px"
+                    }}>
+                      <div style={{
+                        display:        "flex",
+                        justifyContent: "space-between",
+                        alignItems:     "center",
+                        marginBottom:   "10px"
+                      }}>
+                        <span style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--t1)" }}>
+                          Test Case {tc.test_case}
+                        </span>
+                        <span style={{
+                          color:      tcStyle.color,
+                          fontWeight: 700,
+                          fontSize:   ".78rem",
+                          background: `${tcStyle.border}15`,
+                          padding:    "3px 10px",
+                          borderRadius: "20px",
+                          border:     `1px solid ${tcStyle.border}44`
+                        }}>
+                          {tc.passed ? "✅ PASSED" : `❌ ${tc.status}`}
+                        </span>
+                      </div>
+
+                      {tc.input && (
+                        <div style={{ marginBottom: "6px" }}>
+                          <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                            Input:
+                          </div>
+                          <code style={{
+                            display: "block", background: "rgba(0,0,0,.2)",
+                            padding: "8px 10px", borderRadius: "6px",
+                            fontSize: ".8rem", color: "#93c5fd",
+                            whiteSpace: "pre-wrap", wordBreak: "break-all"
+                          }}>
+                            {tc.input || "(empty)"}
+                          </code>
+                        </div>
+                      )}
+
+                      <div style={{ marginBottom: "6px" }}>
+                        <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                          Expected:
+                        </div>
+                        <code style={{
+                          display: "block", background: "rgba(0,0,0,.2)",
+                          padding: "8px 10px", borderRadius: "6px",
+                          fontSize: ".8rem", color: "#16a34a",
+                          whiteSpace: "pre-wrap", wordBreak: "break-all"
+                        }}>
+                          {tc.expected || "(empty)"}
+                        </code>
+                      </div>
+
+                      <div style={{ marginBottom: "6px" }}>
+                        <div style={{ fontSize: ".75rem", color: "var(--t2)", marginBottom: "3px", fontWeight: 600 }}>
+                          Your Output:
+                        </div>
+                        <code style={{
+                          display: "block", background: "rgba(0,0,0,.2)",
+                          padding: "8px 10px", borderRadius: "6px",
+                          fontSize: ".8rem",
+                          color: tc.passed ? "#16a34a" : "#ef4444",
+                          whiteSpace: "pre-wrap", wordBreak: "break-all"
+                        }}>
+                          {tc.got || "(no output)"}
+                        </code>
+                      </div>
+
+                      {tc.error_message && (
+                        <div style={{ marginTop: "8px" }}>
+                          <div style={{ fontSize: ".75rem", color: "#ef4444", marginBottom: "3px", fontWeight: 600 }}>
+                            Error:
+                          </div>
+                          <pre style={{
+                            background: "rgba(239,68,68,.06)",
+                            border: "1px solid rgba(239,68,68,.25)",
+                            borderRadius: "6px", padding: "8px 10px",
+                            fontSize: ".78rem", color: "#fca5a5",
+                            whiteSpace: "pre-wrap", wordBreak: "break-word",
+                            maxHeight: "150px", overflow: "auto"
+                          }}>
+                            {tc.error_message}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
 
         {/* ── RIGHT PANEL — Code Editor ── */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
 
-          {/* Language selector bar */}
+          {/* Actions bar */}
           <div style={{
-            display:     "flex",
-            gap:         "6px",
-            padding:     "10px 16px",
-            borderBottom: "1px solid var(--bdr)",
-            background:  "var(--bg2)"
+            display:        "flex",
+            flexWrap:       "wrap",
+            gap:            "8px",
+            padding:        "10px 16px",
+            borderBottom:   "1px solid var(--bdr)",
+            background:     "var(--bg2)",
+            alignItems:     "center",
+            justifyContent: "space-between"
           }}>
-            {LANGUAGES.map(lang => (
+            <div style={{ color: "var(--t2)", fontSize: ".9rem", fontWeight: 600 }}>
+              Language: {LANGUAGES.find(lang => lang.id === language)?.label}
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <button
-                key={lang.id}
-                onClick={() => handleLanguageChange(lang.id)}
+                onClick={handleRun}
+                disabled={running || submitting}
+                className="btn"
                 style={{
-                  padding:      "5px 14px",
-                  borderRadius: "8px",
-                  border:       language === lang.id
-                                  ? "1px solid var(--p)"
-                                  : "1px solid var(--bdr)",
-                  background:   language === lang.id
-                                  ? "var(--grad)"
-                                  : "var(--card)",
-                  color:        language === lang.id ? "#fff" : "var(--t2)",
-                  cursor:       "pointer",
+                  background:   "rgba(22,163,74,.15)",
+                  border:       "1px solid rgba(22,163,74,.4)",
+                  color:        "#16a34a",
+                  padding:      "7px 16px",
                   fontSize:     ".82rem",
-                  fontWeight:   600,
-                  transition:   "all .2s"
+                  fontWeight:   700,
+                  opacity:      (running || submitting) ? 0.5 : 1,
+                  cursor:       (running || submitting) ? "not-allowed" : "pointer"
                 }}
               >
-                {lang.icon} {lang.label}
+                {running ? "⏳ Running..." : "▶️ Run"}
               </button>
-            ))}
+
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || running}
+                className="btn btnp"
+                style={{
+                  padding:  "7px 16px",
+                  fontSize: ".82rem",
+                  opacity:  (submitting || running) ? 0.5 : 1,
+                  cursor:   (submitting || running) ? "not-allowed" : "pointer"
+                }}
+              >
+                {submitting ? "⏳ Submitting..." : "🚀 Submit"}
+              </button>
+            </div>
           </div>
 
           {/* Monaco Editor */}
