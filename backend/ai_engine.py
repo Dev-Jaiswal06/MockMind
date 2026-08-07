@@ -1,5 +1,5 @@
 # backend/ai_engine.py — Gemini / OpenRouter / Grok fallback support
-import os, json, random, re
+import copy, os, json, random, re
 import requests
 from datetime import datetime
 import google.generativeai as genai
@@ -322,6 +322,32 @@ def _get_mongodb_coding_problem(difficulty=None):
             r = result[0]
             r.pop("_id", None)
             return r
+    except Exception:
+        pass
+    return None
+
+
+def _get_mongodb_coding_problems(difficulty=None, num_q=20):
+    """MongoDB se coding problems lo and return up to num_q items."""
+    if coding_problems_col is None or num_q <= 0:
+        return None
+
+    try:
+        match = {}
+        if difficulty:
+            match["difficulty"] = difficulty
+
+        fetch = min(max(num_q * 4, num_q + 20), 100)
+        docs = _random_docs(coding_problems_col, match, fetch)
+        problems = []
+        for r in docs:
+            if len(problems) >= num_q:
+                break
+            r.pop("_id", None)
+            problems.append(r)
+
+        if problems:
+            return problems[:num_q]
     except Exception:
         pass
     return None
@@ -1449,6 +1475,31 @@ def _FALLBACK_PROBLEMS(difficulty):
     ]
 
 
+def generate_coding_problems(role, difficulty="medium", count=20):
+    if count <= 1:
+        return [generate_coding_problem(role, difficulty)]
+
+    problems = []
+    if coding_problems_col is not None:
+        docs = _get_mongodb_coding_problems(difficulty, count)
+        if docs:
+            problems = docs
+
+    if len(problems) < count:
+        fallback = _FALLBACK_PROBLEMS(difficulty)
+        if fallback:
+            while len(problems) < count:
+                for item in random.sample(fallback, len(fallback)):
+                    if len(problems) >= count:
+                        break
+                    problems.append(copy.deepcopy(item))
+
+    if problems:
+        return problems[:count]
+
+    return [generate_coding_problem(role, difficulty) for _ in range(count)]
+
+
 def generate_coding_problem(role, difficulty="medium"):
     topic_map = {
         "frontend":    ["array methods", "string operations", "async/await", "closures"],
@@ -1499,6 +1550,7 @@ Return ONLY valid JSON with no extra text:
   "description": "Clear and detailed problem description in 2-3 paragraphs",
   "function_signature": {{
     "python": "def solution(nums, target):",
+    "javascript": "function solution(nums, target)",
     "java": "public int[] solution(int[] nums, int target)",
     "cpp": "vector<int> solution(vector<int>& nums, int target)",
     "c": "int* solution(int* nums, int n, int target, int* returnSize)"
