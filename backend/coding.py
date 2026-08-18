@@ -2,6 +2,7 @@
 import logging
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from collections import defaultdict
 from models import coding_col, update_user_stats
 from ai_engine import generate_coding_problem, generate_coding_problems, _update_coding_attempted
 from code_runner import run_with_piston
@@ -23,6 +24,47 @@ def health_check():
         "engine_status": result.get("status"),
         "engine_stdout": result.get("stdout", "").strip(),
         "message":       "Judge0 OK" if result.get("status") == "Success" else "Judge0 ERROR: " + (result.get("stderr") or result.get("status", "unknown")),
+    })
+
+
+@coding_bp.route("/api/coding/history", methods=["GET"])
+@jwt_required()
+def get_history():
+    uid = get_jwt_identity()
+    submissions_raw = list(coding_col.find(
+        {"user_id": uid},
+        {"problem_title": 1, "language": 1, "code_submitted": 1, "score": 1,
+         "test_passed": 1, "test_total": 1, "status": 1, "created_at": 1},
+        sort=[("created_at", -1)]
+    ))
+
+    solved = set()
+    saved_code = defaultdict(dict)
+    submissions = []
+
+    for sub in submissions_raw:
+        title = sub.get("problem_title", "")
+        lang  = sub.get("language", "")
+        if not title or not lang:
+            continue
+
+        if sub.get("test_passed", 0) == sub.get("test_total", 0) and sub.get("test_total", 0) > 0:
+            solved.add(title)
+            if lang not in saved_code[title]:
+                saved_code[title][lang] = sub.get("code_submitted", "")
+            submissions.append({
+                "title":       title,
+                "language":    lang,
+                "test_passed": sub.get("test_passed", 0),
+                "test_total":  sub.get("test_total", 0),
+                "code":        sub.get("code_submitted", ""),
+                "created_at":  str(sub.get("created_at", ""))
+            })
+
+    return jsonify({
+        "solved":      list(solved),
+        "saved_code":  dict(saved_code),
+        "submissions": submissions
     })
 
 

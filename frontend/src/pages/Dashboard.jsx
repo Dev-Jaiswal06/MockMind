@@ -29,6 +29,12 @@ export default function Dashboard() {
     role:    d.role
   }))
 
+  const codingChartData = (data?.recent_coding || []).reverse().map((d, i) => ({
+    session: `P${i + 1}`,
+    score:   d.test_total ? Math.round((d.test_passed / d.test_total) * 100) : 0,
+    problem: d.problem_title
+  }))
+
   if (load) return (
     <div style={{ padding:"28px", maxWidth:"1400px", margin:"0 auto" }}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:"16px", marginBottom:"28px" }}>
@@ -218,61 +224,40 @@ export default function Dashboard() {
         </motion.div>
       )}
 
-      {/* Recent Interviews */}
-      {data?.recent_interviews?.length > 0 && (
+      {/* Coding Score History */}
+      {codingChartData.length > 0 && (
         <motion.div
           className="glass"
-          style={{ padding:"24px" }}
+          style={{ padding:"24px", marginBottom:"20px" }}
           initial={{ opacity:0, y:20 }}
           animate={{ opacity:1, y:0 }}
           transition={{ delay:.5 }}
         >
-          <h3 style={{ fontWeight:700, marginBottom:"14px", fontSize:"1.1rem" }}>
-            🕒 Recent Interview Sessions
+          <h3 style={{ fontWeight:700, marginBottom:"18px", fontSize:"1.1rem" }}>
+            💻 Coding Score History
           </h3>
-          {data.recent_interviews.map((s, i) => (
-            <div key={i} style={{
-              display:        "flex",
-              justifyContent: "space-between",
-              alignItems:     "center",
-              padding:        "14px",
-              borderRadius:   "10px",
-              background:     "var(--card2)",
-              marginBottom:   "9px",
-              border:         "1px solid var(--bdr)"
-            }}>
-              <div>
-                <div style={{ fontWeight:600, fontSize:".95rem" }}>{s.role}</div>
-                <div style={{ fontSize:".8rem", color:"var(--t2)" }}>
-                  {new Date(s.created_at).toLocaleDateString("en-IN", {
-                    day:"numeric", month:"short", year:"numeric"
-                  })}
-                </div>
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
-                <div style={{
-                  fontSize:   "1.35rem",
-                  fontWeight: 800,
-                  color:      s.percentage >= 70 ? "#16a34a"
-                            : s.percentage >= 50 ? "#f59e0b"
-                            : "#ef4444"
-                }}>
-                  {Math.round(s.percentage)}%
-                </div>
-                <span style={{
-                  background:   "rgba(22,163,74,.2)",
-                  border:       "1px solid rgba(22,163,74,.3)",
-                  borderRadius: "7px",
-                  padding:      "3px 9px",
-                  fontSize:     ".75rem",
-                  fontWeight:   700,
-                  color:        "#16a34a"
-                }}>
-                  {s.grade}
-                </span>
-              </div>
-            </div>
-          ))}
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={codingChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--bdr)"/>
+              <XAxis dataKey="session" stroke="var(--t3)" fontSize={11}/>
+              <YAxis stroke="var(--t3)" fontSize={11} domain={[0, 100]}/>
+              <Tooltip
+                contentStyle={{
+                  background:   "var(--bg2)",
+                  border:       "1px solid var(--bdr)",
+                  borderRadius: "8px"
+                }}
+                formatter={(value, name, props) => [`${value}%`, props?.payload?.problem || "Score"]}
+              />
+              <Line
+                type="monotone"
+                dataKey="score"
+                stroke="#16a34a"
+                strokeWidth={2.5}
+                dot={{ fill:"#16a34a", r:4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </motion.div>
       )}
     </div>

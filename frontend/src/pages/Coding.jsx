@@ -1,5 +1,6 @@
 // frontend/src/pages/Coding.jsx
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useSearchParams }                          from "react-router-dom"
 import Editor                  from "@monaco-editor/react"
 import API                     from "../utils/api"
 import toast                   from "react-hot-toast"
@@ -76,13 +77,44 @@ export default function Coding() {
   const [currentIndex,   setCurrentIndex]   = useState(0)
   const [problem,        setProblem]        = useState(null)
   const [code,           setCode]           = useState("")
-  const [language,       setLanguage]       = useState("python")
-  const [difficulty,     setDifficulty]     = useState("medium")
+  const [language,       setLanguage]       = useState("java")
+  const [difficulty,     setDifficulty]     = useState("easy")
   const [runResults,     setRunResults]     = useState(null)
   const [results,        setResults]        = useState(null)
   const [loading,        setLoading]        = useState(false)
   const [running,        setRunning]        = useState(false)
   const [submitting,     setSubmitting]     = useState(false)
+  const [solvedMap,      setSolvedMap]      = useState({})
+  const [savedCodeMap,   setSavedCodeMap]   = useState({})
+  const savedCodeRef     = useRef({})
+  const [historyStack,   setHistoryStack]   = useState([])
+  const [historyIdx,     setHistoryIdx]     = useState(-1)
+  const [showSolution,   setShowSolution]   = useState(false)
+  const [solutionLang,   setSolutionLang]   = useState("java")
+  const [searchParams,     setSearchParams]   = useSearchParams()
+
+  // ── Resolve code for a problem + language (saved > starter > empty) ──
+  const resolveCode = (prob, lang) => {
+    if (!prob) return ""
+    const title = prob.title
+    if (title && savedCodeRef.current[title]?.[lang]) return savedCodeRef.current[title][lang]
+    if (prob.starter_code?.[lang]) return prob.starter_code[lang]
+    return ""
+  }
+
+  // ── Fetch coding history (solved + saved code) ──
+  useEffect(() => {
+    API.get("/api/coding/history")
+      .then(r => {
+        const solved = {}
+        ;(r.data.solved || []).forEach(t => { solved[t] = true })
+        setSolvedMap(solved)
+        const sc = r.data.saved_code || {}
+        savedCodeRef.current = sc
+        setSavedCodeMap(sc)
+      })
+      .catch(() => {})
+  }, [])
 
   // ── Fetch new problem ──
   const fetchProblems = useCallback(async () => {
@@ -99,48 +131,73 @@ export default function Coding() {
         return
       }
 
-      setProblems(loaded)
+      // Fisher-Yates shuffle
+      const shuffled = [...loaded]
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+      }
+
+      // If URL has ?problem= param, find and put it first
+      const targetTitle = searchParams.get("problem")
+      if (targetTitle) {
+        const idx = shuffled.findIndex(p => p.title === targetTitle)
+        if (idx > 0) {
+          const [match] = shuffled.splice(idx, 1)
+          shuffled.unshift(match)
+        }
+        setSearchParams({})
+      }
+
+      setProblems(shuffled)
       setCurrentIndex(0)
-      setProblem(loaded[0])
-      setCode(loaded[0].starter_code?.[language] || "# Write your code here\n")
-      toast.success(`Loaded ${loaded.length} problem${loaded.length === 1 ? "" : "s"} for this difficulty.`)
+      setProblem(shuffled[0])
+      setCode(resolveCode(shuffled[0], language))
+      setHistoryStack([shuffled[0]])
+      setHistoryIdx(0)
+      setResults(null)
+      setRunResults(null)
+      toast.success("Loaded coding problems")
     } catch {
       toast.error("Failed to load problems. Please try again.")
     } finally {
       setLoading(false)
     }
-  }, [difficulty, language])
+  }, [difficulty, language, searchParams, setSearchParams])
 
   useEffect(() => {
     fetchProblems()
   }, [difficulty])
   
-  // ── When language changes update starter code ──
+  // ── When language changes, load saved code or starter code ──
   const handleLanguageChange = (lang) => {
     setLanguage(lang)
-    if (problem?.starter_code?.[lang]) {
-      setCode(problem.starter_code[lang])
-    }
+    setCode(resolveCode(problem, lang))
   }
 
   const handlePreviousProblem = () => {
-    if (currentIndex <= 0 || !problems.length) return
-    const nextIndex = currentIndex - 1
-    setCurrentIndex(nextIndex)
-    const p = problems[nextIndex]
+    if (historyIdx <= 0) return
+    const prevIdx = historyIdx - 1
+    setHistoryIdx(prevIdx)
+    const p = historyStack[prevIdx]
     setProblem(p)
-    setCode(p.starter_code?.[language] || "# Write your code here\n")
+    setCode(resolveCode(p, language))
+    setCurrentIndex(problems.indexOf(p))
     setRunResults(null)
     setResults(null)
   }
 
   const handleNextProblem = () => {
-    if (currentIndex >= problems.length - 1 || !problems.length) return
-    const nextIndex = currentIndex + 1
-    setCurrentIndex(nextIndex)
-    const p = problems[nextIndex]
-    setProblem(p)
-    setCode(p.starter_code?.[language] || "# Write your code here\n")
+    if (currentIndex >= problems.length - 1) return
+    const nextIdx = currentIndex + 1
+    const next = problems[nextIdx]
+    const newStack = historyStack.slice(0, historyIdx + 1)
+    newStack.push(next)
+    setHistoryStack(newStack)
+    setHistoryIdx(newStack.length - 1)
+    setCurrentIndex(nextIdx)
+    setProblem(next)
+    setCode(resolveCode(next, language))
     setRunResults(null)
     setResults(null)
   }
@@ -154,6 +211,7 @@ export default function Coding() {
     if (!problem) return
     setRunning(true)
     setRunResults(null)
+    setResults(null)
     try {
       const res = await API.post("/api/coding/run-cases", {
         code,
@@ -186,6 +244,7 @@ export default function Coding() {
     if (!problem) return
     setSubmitting(true)
     setResults(null)
+    setRunResults(null)
     try {
       const res = await API.post("/api/coding/submit", {
         code,
@@ -196,6 +255,12 @@ export default function Coding() {
       setResults(res.data)
       if (res.data.all_passed) {
         toast.success("All test cases passed!")
+        setSolvedMap(prev => ({ ...prev, [problem.title]: true }))
+        setSavedCodeMap(prev => {
+          const next = { ...prev, [problem.title]: { ...(prev[problem.title] || {}), [language]: code } }
+          savedCodeRef.current = next
+          return next
+        })
       } else {
         toast.error(`${res.data.passed}/${res.data.total} test cases passed`)
       }
@@ -218,7 +283,7 @@ export default function Coding() {
       gap:            "16px"
     }}>
       <div className="spinner" style={{ width: 48, height: 48 }}/>
-      <p style={{ color: "var(--t2)" }}>Generating coding problem with AI...</p>
+      <p style={{ color: "var(--t2)" }}>Generating coding problems...</p>
     </div>
   )
 
@@ -307,23 +372,25 @@ export default function Coding() {
             ))}
           </select>
 
-          <button
-            onClick={handlePreviousProblem}
-            disabled={currentIndex <= 0}
-            className="btn btns"
-            style={{ padding: "7px 14px", fontSize: ".82rem" }}
-          >
-            ◀️ Prev
-          </button>
+          {historyIdx > 0 && (
+            <button
+              onClick={handlePreviousProblem}
+              className="btn btns"
+              style={{ padding: "7px 14px", fontSize: ".82rem" }}
+            >
+              ◀️ Prev
+            </button>
+          )}
 
-          <button
-            onClick={handleNextProblem}
-            disabled={currentIndex >= problems.length - 1}
-            className="btn btns"
-            style={{ padding: "7px 14px", fontSize: ".82rem" }}
-          >
-            Next ▶️
-          </button>
+          {currentIndex < problems.length - 1 && (
+            <button
+              onClick={handleNextProblem}
+              className="btn btns"
+              style={{ padding: "7px 14px", fontSize: ".82rem" }}
+            >
+              Next ▶️
+            </button>
+          )}
 
           <button
             onClick={fetchProblems}
@@ -359,6 +426,40 @@ export default function Coding() {
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span style={{ fontSize: "1rem", fontWeight: 700 }}>📋 Problem</span>
+              {solvedMap[problem?.title] && (
+                <span style={{
+                  fontSize: ".75rem",
+                  color: "#16a34a",
+                  background: "rgba(22,163,74,.12)",
+                  border: "1px solid rgba(22,163,74,.3)",
+                  borderRadius: "12px",
+                  padding: "3px 10px",
+                  fontWeight: 700
+                }}>
+                  ✅ Solved
+                </span>
+              )}
+              {solvedMap[problem?.title] && (
+                <button
+                  onClick={() => {
+                    const langs = Object.keys(savedCodeMap[problem?.title] || {})
+                    setSolutionLang(langs[0] || language)
+                    setShowSolution(true)
+                  }}
+                  style={{
+                    fontSize:     ".75rem",
+                    color:        "var(--pl)",
+                    background:   "rgba(129,140,248,.12)",
+                    border:       "1px solid rgba(129,140,248,.3)",
+                    borderRadius: "12px",
+                    padding:      "3px 10px",
+                    fontWeight:   700,
+                    cursor:       "pointer"
+                  }}
+                >
+                  👁️ View Solution
+                </button>
+              )}
               {results?.all_passed && (
                 <span style={{
                   fontSize: ".8rem",
@@ -386,15 +487,15 @@ export default function Coding() {
                 </p>
 
                 {/* Examples */}
-                <h4 style={{ marginBottom: "10px", fontSize: ".9rem", color: "var(--pl)" }}>
-                  Examples:
-                </h4>
                 {problem.examples?.map((ex, i) => (
                   <div key={i} className="glass" style={{
                     padding:      "14px",
                     marginBottom: "10px",
                     fontSize:     ".85rem"
                   }}>
+                    <div style={{ fontWeight: 700, marginBottom: "8px", fontSize: ".88rem" }}>
+                      Example {i + 1}:
+                    </div>
                     <div style={{ marginBottom: "6px" }}>
                       <strong style={{ color: "var(--t2)" }}>Input: </strong>
                       <code style={{ color: "#16a34a" }}>{ex.input}</code>
@@ -404,8 +505,8 @@ export default function Coding() {
                       <code style={{ color: "#f59e0b" }}>{ex.output}</code>
                     </div>
                     {ex.explanation && (
-                      <div style={{ color: "var(--t2)", marginTop: "6px", fontStyle: "italic" }}>
-                        {ex.explanation}
+                      <div style={{ color: "var(--t2)", marginTop: "6px" }}>
+                        <strong>Explanation: </strong>{ex.explanation}
                       </div>
                     )}
                   </div>
@@ -450,7 +551,7 @@ export default function Coding() {
                         <span style={{
                           fontSize:     ".78rem",
                           fontWeight:   700,
-                          color:        "#818cf8",
+                          color:        "var(--pl)",
                           flexShrink:   0,
                           minWidth:     "100px"
                         }}>
@@ -466,7 +567,7 @@ export default function Coding() {
                         <span style={{
                           fontSize:     ".78rem",
                           fontWeight:   700,
-                          color:        "#818cf8",
+                          color:        "var(--pl)",
                           flexShrink:   0,
                           minWidth:     "100px"
                         }}>
@@ -578,7 +679,7 @@ export default function Coding() {
                           <code style={{
                             display: "block", background: "rgba(0,0,0,.2)",
                             padding: "8px 10px", borderRadius: "6px",
-                            fontSize: ".8rem", color: "#93c5fd",
+                            fontSize: ".8rem", color: "var(--t1)",
                             whiteSpace: "pre-wrap", wordBreak: "break-all"
                           }}>
                             {tc.input || "(empty)"}
@@ -624,7 +725,7 @@ export default function Coding() {
                             background: "rgba(239,68,68,.06)",
                             border: "1px solid rgba(239,68,68,.25)",
                             borderRadius: "6px", padding: "8px 10px",
-                            fontSize: ".78rem", color: "#fca5a5",
+                            fontSize: ".78rem", color: "#ef4444",
                             whiteSpace: "pre-wrap", wordBreak: "break-word",
                             maxHeight: "150px", overflow: "auto"
                           }}>
@@ -713,7 +814,7 @@ export default function Coding() {
                           <code style={{
                             display: "block", background: "rgba(0,0,0,.2)",
                             padding: "8px 10px", borderRadius: "6px",
-                            fontSize: ".8rem", color: "#93c5fd",
+                            fontSize: ".8rem", color: "var(--t1)",
                             whiteSpace: "pre-wrap", wordBreak: "break-all"
                           }}>
                             {tc.input || "(empty)"}
@@ -759,7 +860,7 @@ export default function Coding() {
                             background: "rgba(239,68,68,.06)",
                             border: "1px solid rgba(239,68,68,.25)",
                             borderRadius: "6px", padding: "8px 10px",
-                            fontSize: ".78rem", color: "#fca5a5",
+                            fontSize: ".78rem", color: "#ef4444",
                             whiteSpace: "pre-wrap", wordBreak: "break-word",
                             maxHeight: "150px", overflow: "auto"
                           }}>
@@ -853,6 +954,96 @@ export default function Coding() {
           </div>
         </div>
       </div>
+
+      {/* ── View Solution Modal ── */}
+      {showSolution && (
+        <div style={{
+          position:      "fixed",
+          top: 0, left: 0, right: 0, bottom: 0,
+          background:    "rgba(0,0,0,.6)",
+          zIndex:        1000,
+          display:       "flex",
+          alignItems:    "center",
+          justifyContent:"center",
+          padding:       "20px"
+        }} onClick={() => setShowSolution(false)}>
+          <div
+            style={{
+              background:   "var(--card)",
+              border:       "1px solid var(--bdr)",
+              borderRadius: "16px",
+              width:        "700px",
+              maxWidth:     "95vw",
+              maxHeight:    "85vh",
+              display:      "flex",
+              flexDirection:"column",
+              overflow:     "hidden"
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "space-between",
+              padding:        "16px 20px",
+              borderBottom:   "1px solid var(--bdr)",
+              background:     "var(--bg2)"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontWeight: 700, fontSize: "1rem" }}>👁️ Your Solution</span>
+                <span style={{ fontSize: ".82rem", color: "var(--t2)" }}>{problem?.title}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <select
+                  value={solutionLang}
+                  onChange={e => setSolutionLang(e.target.value)}
+                  className="inp"
+                  style={{ width: "auto", padding: "5px 10px", fontSize: ".8rem", borderRadius: "8px" }}
+                >
+                  {Object.keys(savedCodeMap[problem?.title] || {}).map(l => (
+                    <option key={l} value={l}>{LANGUAGES.find(x => x.id === l)?.label || l}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setShowSolution(false)}
+                  style={{
+                    background:   "transparent",
+                    border:       "none",
+                    color:        "var(--t2)",
+                    fontSize:     "1.3rem",
+                    cursor:       "pointer",
+                    padding:      "4px"
+                  }}
+                >✕</button>
+              </div>
+            </div>
+            {/* Modal Body — Read-only editor */}
+            <div style={{ flex: 1, minHeight: "400px" }}>
+              <Editor
+                height="100%"
+                language={solutionLang === "cpp" ? "cpp" : solutionLang}
+                value={savedCodeMap[problem?.title]?.[solutionLang] || ""}
+                theme="vs-dark"
+                options={{
+                  readOnly:           true,
+                  fontSize:           14,
+                  fontFamily:         "JetBrains Mono, Fira Code, monospace",
+                  minimap:            { enabled: false },
+                  scrollBeyondLastLine: false,
+                  automaticLayout:    true,
+                  tabSize:            2,
+                  wordWrap:           "on",
+                  lineNumbers:        "on",
+                  renderLineHighlight: "none",
+                  cursorBlinking:     "solid",
+                  contextmenu:        false
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

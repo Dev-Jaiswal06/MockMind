@@ -1,7 +1,7 @@
 # backend/reports.py
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import sessions_col, coding_col, stats_col, user_weak_topics_col
+from models import sessions_col, coding_col, stats_col, user_weak_topics_col, update_user_stats
 
 reports_bp = Blueprint("reports", __name__)
 
@@ -10,6 +10,11 @@ reports_bp = Blueprint("reports", __name__)
 @jwt_required()
 def dashboard():
     uid = get_jwt_identity()
+
+    try:
+        update_user_stats(uid)
+    except Exception:
+        pass
 
     stats = stats_col.find_one({"user_id":uid})
     if stats: stats.pop("_id",None)

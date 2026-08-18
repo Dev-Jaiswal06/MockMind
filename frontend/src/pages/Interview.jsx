@@ -217,11 +217,9 @@ export default function Interview() {
       }
       if (final) {
         committedAnswerRef.current = `${committedAnswerRef.current}${committedAnswerRef.current && !committedAnswerRef.current.endsWith(" ") ? " " : ""}${final.trim()}`
-        setAnswer(committedAnswerRef.current)
-      } else {
-        const combined = `${committedAnswerRef.current}${committedAnswerRef.current && interim && !committedAnswerRef.current.endsWith(" ") ? " " : ""}${interim}`
-        setAnswer(combined)
       }
+      const combined = `${committedAnswerRef.current}${committedAnswerRef.current && interim && !committedAnswerRef.current.endsWith(" ") ? " " : ""}${interim}`
+      setAnswer(combined)
     }
 
     recognition.onerror = (e) => {
@@ -792,7 +790,7 @@ export default function Interview() {
             fontSize:  ".82rem",
             color:     "var(--t2)"
           }}>
-            Estimated time: <span style={{ color: "var(--pl)", fontWeight: 700 }}>~{numQuestions * 3} min</span> ({numQuestions} questions × 3 min each)
+            Estimated time: <span style={{ color: "var(--pl)", fontWeight: 700 }}>~{numQuestions * (QUESTION_TIME_LIMIT / 60)} min</span> ({numQuestions} questions × {QUESTION_TIME_LIMIT / 60} min each)
           </div>
         )}
       </motion.div>
@@ -1279,7 +1277,7 @@ export default function Interview() {
           padding:      "20px"
         }}>
           <div className="spinner" style={{ width: 48, height: 48 }}/>
-          <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: "1rem", textAlign: "center" }}>
+          <div style={{ color: "var(--t1)", fontWeight: 700, fontSize: "1rem", textAlign: "center" }}>
             Evaluating your answers & generating report...
           </div>
           <div style={{ color: "var(--t2)", fontSize: ".82rem", textAlign: "center" }}>
