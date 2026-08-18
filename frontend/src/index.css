@@ -165,6 +165,10 @@ body{
 .validation-message.success{color:var(--ok)}
 .validation-message.error{color:var(--err)}
 .inp::placeholder{color:var(--t3)}
+.inp::-webkit-textfield-decoration-button,
+.inp::-webkit-clear-button {
+  display: none !important;
+}
 .password-toggle{
   position:absolute;
   right:12px;

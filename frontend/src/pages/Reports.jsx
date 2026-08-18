@@ -1,6 +1,6 @@
 // frontend/src/pages/Reports.jsx
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Link }                from "react-router-dom"
+import { Link, useNavigate }  from "react-router-dom"
 import { motion }              from "framer-motion"
 import API                     from "../utils/api"
 import {
@@ -12,17 +12,28 @@ import {
 } from "recharts"
 
 export default function Reports() {
+  const navigate = useNavigate()
   const [data,    setData]    = useState(null)
+  const [codingData, setCodingData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
   const [activeTab, setActiveTab] = useState("overview")
+  const [showCodeModal, setShowCodeModal] = useState(false)
+  const [modalCode, setModalCode] = useState({ code: "", lang: "", title: "" })
   const fetched = useRef(false)
 
   const loadData = useCallback(() => {
     setLoading(true)
     setError(null)
-    API.get("/api/reports/performance")
-      .then(r  => { setData(r.data); setLoading(false) })
+    Promise.all([
+      API.get("/api/reports/performance"),
+      API.get("/api/coding/history").catch(() => ({ data: {} }))
+    ])
+      .then(([r, c]) => { 
+        setData(r.data)
+        setCodingData(c.data)
+        setLoading(false) 
+      })
       .catch(err => { 
         setError(err.message || "Failed to load performance data")
         setLoading(false)
@@ -133,11 +144,21 @@ export default function Reports() {
     return "#ef4444"
   }
 
+  const timeAgo = (dateStr) => {
+    if (!dateStr) return ""
+    const seconds = Math.floor((Date.now() - new Date(dateStr)) / 1000)
+    if (seconds < 60)    return "few seconds ago"
+    if (seconds < 3600)  return `${Math.floor(seconds / 60)} min ago`
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
+    return `${Math.floor(seconds / 86400)}d ago`
+  }
+
   const tabs = [
-    { id: "overview",  label: "📈 Overview"   },
-    { id: "history",   label: "🕒 History"    },
-    { id: "roles",     label: "🎯 By Role"    },
-    { id: "analysis",  label: "🔍 Analysis"   },
+    { id: "overview",  label: "📈 Overview"         },
+    { id: "interview", label: "🕒 Interview"        },
+    { id: "coding",    label: "💻 Coding"           },
+    { id: "roles",     label: "🎯 By Role Interviews" },
+    { id: "analysis",  label: "🔍 Analysis"         },
   ]
 
   return (
@@ -341,8 +362,8 @@ export default function Reports() {
         </motion.div>
       )}
 
-      {/* ── TAB: History ── */}
-      {activeTab === "history" && (
+      {/* ── TAB: Interview ── */}
+      {activeTab === "interview" && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y:  0 }}
@@ -440,6 +461,132 @@ export default function Reports() {
                 </div>
               </motion.div>
             ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── TAB: Coding ── */}
+      {activeTab === "coding" && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y:  0 }}
+        >
+          <div className="glass" style={{ padding: "24px" }}>
+            {/* Stats Row */}
+            <div style={{ display: "flex", gap: "20px", marginBottom: "20px", flexWrap: "wrap" }}>
+              <div>
+                <span style={{ fontSize: ".78rem", color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".5px" }}>Solved</span>
+                <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "#16a34a" }}>
+                  {codingData?.solved?.length || 0}
+                </div>
+              </div>
+              <div>
+                <span style={{ fontSize: ".78rem", color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".5px" }}>Languages</span>
+                <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "#2563eb" }}>
+                  {(() => {
+                    const langs = {}
+                    ;(codingData?.submissions || []).forEach(s => { langs[s.language] = (langs[s.language] || 0) + 1 })
+                    return Object.entries(langs).map(([l, c]) => `${l.toUpperCase()}(${c})`).join(", ") || "N/A"
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            <h3 style={{ fontWeight: 700, marginBottom: "18px", fontSize: "1rem" }}>
+              💻 Solved Problems ({codingData?.submissions?.length || 0})
+            </h3>
+
+            {/* Table Header */}
+            <div style={{
+              display:             "grid",
+              gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
+              gap:                 "12px",
+              padding:             "10px 14px",
+              background:          "var(--bg2)",
+              borderRadius:        "8px",
+              marginBottom:        "8px",
+              fontSize:            ".78rem",
+              color:               "var(--t3)",
+              fontWeight:          700,
+              textTransform:       "uppercase",
+              letterSpacing:       ".5px"
+            }}>
+              <div>Problem</div>
+              <div>Language</div>
+              <div>Score</div>
+              <div>When</div>
+              <div>Action</div>
+            </div>
+
+            {/* Rows */}
+            {(codingData?.submissions || []).length === 0 ? (
+              <p style={{ color: "var(--t2)", textAlign: "center", padding: "30px 0" }}>
+                No solved problems yet. Start coding to see your history!
+              </p>
+            ) : (
+              (codingData?.submissions || []).map((s, i) => (
+                <motion.div
+                  key={i}
+                  style={{
+                    display:             "grid",
+                    gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
+                    gap:                 "12px",
+                    padding:             "12px 14px",
+                    borderRadius:        "10px",
+                    background:          "var(--card2)",
+                    marginBottom:        "8px",
+                    border:              "1px solid var(--bdr)",
+                    alignItems:          "center"
+                  }}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x:  0  }}
+                  transition={{ delay: i * .05 }}
+                  whileHover={{ borderColor: "rgba(37,99,235,.3)" }}
+                >
+                  <div
+                    style={{ fontWeight: 600, fontSize: ".88rem", color: "#16a34a", cursor: "pointer" }}
+                    onClick={() => navigate("/coding?problem=" + encodeURIComponent(s.title))}
+                  >
+                    ✅ {s.title}
+                  </div>
+                  <div>
+                    <span style={{
+                      background:   "rgba(37,99,235,.15)",
+                      border:       "1px solid rgba(37,99,235,.3)",
+                      borderRadius: "6px",
+                      padding:      "3px 8px",
+                      fontSize:     ".75rem",
+                      color:        "var(--pl)"
+                    }}>
+                      {s.language?.toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: ".9rem", color: "#16a34a" }}>
+                    {s.test_passed}/{s.test_total}
+                  </div>
+                  <div style={{ fontSize: ".78rem", color: "var(--t2)" }}>
+                    {timeAgo(s.created_at)}
+                  </div>
+                  <div>
+                    <button
+                      onClick={() => { setModalCode({ code: s.code, lang: s.language, title: s.title }); setShowCodeModal(true) }}
+                      style={{
+                        background:   "rgba(129,140,248,.12)",
+                        border:       "1px solid rgba(129,140,248,.3)",
+                        borderRadius: "6px",
+                        padding:      "4px 10px",
+                        fontSize:     ".75rem",
+                        fontWeight:   700,
+                        color:        "#818cf8",
+                        cursor:       "pointer"
+                      }}
+                    >
+                      View Code
+                    </button>
+                  </div>
+                </motion.div>
+              ))
+            )}
           </div>
         </motion.div>
       )}
@@ -696,6 +843,122 @@ export default function Reports() {
               </p>
             </div>
 
+            {/* Coding Strengths */}
+            <div className="glass" style={{
+              padding:    "24px",
+              background: "rgba(22,163,74,.05)",
+              border:     "1px solid rgba(22,163,74,.2)"
+            }}>
+              <h3 style={{ fontWeight: 700, marginBottom: "16px", color: "#16a34a" }}>
+                💻 Coding Strengths
+              </h3>
+              {(codingData?.solved?.length || 0) === 0 ? (
+                <p style={{ color: "var(--t2)", fontSize: ".88rem" }}>
+                  Solve coding problems to see your strengths!
+                </p>
+              ) : (
+                <>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: "10px",
+                    padding: "10px", borderRadius: "8px", background: "rgba(22,163,74,.08)", marginBottom: "8px"
+                  }}>
+                    <span style={{ color: "#16a34a", fontSize: "1.2rem" }}>✅</span>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: ".88rem" }}>
+                        {codingData?.solved?.length || 0} Problems Solved
+                      </div>
+                      <div style={{ fontSize: ".75rem", color: "var(--t2)" }}>
+                        {(() => {
+                          const langs = {}
+                          ;(codingData?.submissions || []).forEach(s => { langs[s.language] = (langs[s.language] || 0) + 1 })
+                          return "Languages: " + Object.entries(langs).map(([l]) => l.toUpperCase()).join(", ")
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                  {(codingData?.submissions || []).length >= 5 && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: "10px",
+                      padding: "10px", borderRadius: "8px", background: "rgba(22,163,74,.08)"
+                    }}>
+                      <span style={{ color: "#16a34a", fontSize: "1.2rem" }}>🏆</span>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: ".88rem" }}>100% Pass Rate</div>
+                        <div style={{ fontSize: ".75rem", color: "var(--t2)" }}>
+                          All submissions passed all test cases
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Coding Areas to Improve */}
+            <div className="glass" style={{
+              padding:    "24px",
+              background: "rgba(245,158,11,.05)",
+              border:     "1px solid rgba(245,158,11,.2)"
+            }}>
+              <h3 style={{ fontWeight: 700, marginBottom: "16px", color: "#f59e0b" }}>
+                ⚠️ Coding Areas to Improve
+              </h3>
+              {(codingData?.solved?.length || 0) === 0 ? (
+                <p style={{ color: "var(--t2)", fontSize: ".88rem" }}>
+                  Start solving problems to track your progress!
+                </p>
+              ) : (
+                <>
+                  {(codingData?.solved?.length || 0) < 5 && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: "10px",
+                      padding: "10px", borderRadius: "8px", background: "rgba(245,158,11,.08)", marginBottom: "8px"
+                    }}>
+                      <span style={{ fontSize: "1.2rem" }}>⚠️</span>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: ".88rem" }}>More Practice Needed</div>
+                        <div style={{ fontSize: ".75rem", color: "var(--t2)" }}>
+                          Solved {codingData?.solved?.length || 0} problems — aim for at least 10
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Coding Recommendations */}
+            <div className="glass" style={{
+              padding:    "24px",
+              background: "rgba(129,140,248,.05)",
+              border:     "1px solid rgba(129,140,248,.2)"
+            }}>
+              <h3 style={{ fontWeight: 700, marginBottom: "16px", color: "#818cf8" }}>
+                💡 Coding Recommendations
+              </h3>
+              {[
+                "Practice at least 1-2 coding problems daily",
+                "Try solving problems in multiple languages",
+                "Focus on understanding time and space complexity",
+                "Review and optimize your solutions after solving",
+                "Gradually move from easy to medium difficulty",
+              ].map((tip, i) => (
+                <div key={i} style={{
+                  display:      "flex",
+                  gap:          "10px",
+                  padding:      "8px 0",
+                  borderBottom: i < 4 ? "1px solid rgba(255,255,255,.05)" : "none"
+                }}>
+                  <span style={{ color: "#818cf8", fontWeight: 700, minWidth: "20px" }}>
+                    {i + 1}.
+                  </span>
+                  <span style={{ fontSize: ".88rem", color: "var(--t2)", lineHeight: 1.5 }}>
+                    {tip}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             {/* Recommendations */}
             <div className="glass" style={{
               padding:    "24px",
@@ -759,6 +1022,66 @@ export default function Reports() {
             </div>
           </div>
         </motion.div>
+      )}
+
+      {/* ── View Code Modal ── */}
+      {showCodeModal && (
+        <div style={{
+          position:      "fixed",
+          top: 0, left: 0, right: 0, bottom: 0,
+          background:    "rgba(0,0,0,.6)",
+          zIndex:        1000,
+          display:       "flex",
+          alignItems:    "center",
+          justifyContent:"center",
+          padding:       "20px"
+        }} onClick={() => setShowCodeModal(false)}>
+          <div
+            style={{
+              background:   "var(--card)",
+              border:       "1px solid var(--bdr)",
+              borderRadius: "16px",
+              width:        "700px",
+              maxWidth:     "95vw",
+              maxHeight:    "85vh",
+              display:      "flex",
+              flexDirection:"column",
+              overflow:     "hidden"
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "space-between",
+              padding:        "16px 20px",
+              borderBottom:   "1px solid var(--bdr)",
+              background:     "var(--bg2)"
+            }}>
+              <span style={{ fontWeight: 700, fontSize: "1rem" }}>
+                👁️ {modalCode.title} — {modalCode.lang?.toUpperCase()}
+              </span>
+              <button
+                onClick={() => setShowCodeModal(false)}
+                style={{ background: "transparent", border: "none", color: "var(--t2)", fontSize: "1.3rem", cursor: "pointer" }}
+              >✕</button>
+            </div>
+            <pre style={{
+              padding:        "20px",
+              margin:         0,
+              overflow:       "auto",
+              fontSize:       ".85rem",
+              fontFamily:     "JetBrains Mono, Fira Code, monospace",
+              background:     "var(--bg)",
+              color:          "var(--t1)",
+              lineHeight:     1.6,
+              whiteSpace:     "pre-wrap",
+              wordBreak:      "break-word"
+            }}>
+              {modalCode.code}
+            </pre>
+          </div>
+        </div>
       )}
     </div>
   )

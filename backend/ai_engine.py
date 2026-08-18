@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip()
 GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-1.5-flash").strip()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini").strip()
@@ -277,33 +277,6 @@ def _get_mongodb_technical_questions(role, num_q=8, difficulty_mix=None, seen=No
     return all_questions[:num_q] if all_questions else None
 
 
-def _get_mongodb_hr_questions(num_q=8, seen=None):
-    """MongoDB se HR questions lo (seen skip karo)."""
-    if hr_questions_col is None:
-        return None
-
-    seen = seen or set()
-    fetch = min(max(num_q * 4, num_q + 10), 60)
-    results = _random_docs(hr_questions_col, {}, fetch)
-    questions = []
-    seen_texts = set()
-    for r in results:
-        q_text = r["question"]
-        key = q_text.strip().lower()
-        if key in seen or key in seen_texts:
-            continue
-        if len(questions) >= num_q:
-            break
-        seen_texts.add(key)
-        questions.append({
-            "question": q_text,
-            "category": r.get("category", "behavioral"),
-            "asked_count": r.get("asked_count", 0),
-            "_id": r["_id"],
-        })
-    return questions if questions else None
-
-
 def _get_mongodb_coding_problem(difficulty=None):
     """MongoDB se coding problem lo (least attempted pehle)."""
     if coding_problems_col is None:
@@ -321,10 +294,46 @@ def _get_mongodb_coding_problem(difficulty=None):
         if result:
             r = result[0]
             r.pop("_id", None)
+            # Auto-fix: if only 1 example, add 2nd from test_cases
+            examples = r.get("examples", [])
+            test_cases = r.get("test_cases", [])
+            if len(examples) == 1 and len(test_cases) >= 2:
+                tc = test_cases[1]
+                examples.append({
+                    "input": tc.get("input", ""),
+                    "output": tc.get("expected", ""),
+                    "explanation": "See the second test case."
+                })
+                r["examples"] = examples
             return r
     except Exception:
         pass
     return None
+
+
+# ══════════════════════════════════
+# CODING PROBLEM — runnable filter
+# ══════════════════════════════════
+_NON_RUNNABLE_SIG_TOKENS = (
+    "ListNode", "TreeNode", "GraphNode", "RandomNode",
+    "Node*", "Node *", "struct Node", "class ",
+)
+
+
+def _is_runnable_problem(problem):
+    """Return False for problems the execution harness cannot run in any
+    language (linked-list/tree/graph pointers, class-based design problems,
+    clone-graph style inputs). char** string-array problems are kept: they
+    run fine in Python/C++/Java."""
+    try:
+        sig = problem.get("function_signature") or {}
+        if isinstance(sig, dict):
+            sig_text = " ".join(str(v) for v in sig.values())
+        else:
+            sig_text = " ".join(str(v) for v in sig)
+        return not any(tok in sig_text for tok in _NON_RUNNABLE_SIG_TOKENS)
+    except Exception:
+        return True
 
 
 def _get_mongodb_coding_problems(difficulty=None, num_q=20):
@@ -344,6 +353,19 @@ def _get_mongodb_coding_problems(difficulty=None, num_q=20):
             if len(problems) >= num_q:
                 break
             r.pop("_id", None)
+            if not _is_runnable_problem(r):
+                continue
+            # Auto-fix: if only 1 example, add 2nd from test_cases
+            examples = r.get("examples", [])
+            test_cases = r.get("test_cases", [])
+            if len(examples) == 1 and len(test_cases) >= 2:
+                tc = test_cases[1]
+                examples.append({
+                    "input": tc.get("input", ""),
+                    "output": tc.get("expected", ""),
+                    "explanation": "See the second test case."
+                })
+                r["examples"] = examples
             problems.append(r)
 
         if problems:
@@ -360,25 +382,6 @@ def _update_question_asked_count(question_id, collection_type="question_bank"):
             question_bank_col.update_one({"_id": question_id}, {"$inc": {"asked_count": 1}})
         elif collection_type == "hr" and hr_questions_col is not None:
             hr_questions_col.update_one({"_id": question_id}, {"$inc": {"asked_count": 1}})
-    except Exception:
-        pass
-
-
-def _update_question_score(question_id, score, collection_type="question_bank"):
-    """Question ka avg_score update karo."""
-    try:
-        col = question_bank_col if collection_type == "question_bank" else hr_questions_col
-        if col is not None:
-            col.update_one(
-                {"_id": question_id},
-                {"$inc": {"total_score_sum": score, "times_scored": 1},
-                 "$set": {"avg_score": score}}
-            )
-            # Recalculate avg
-            doc = col.find_one({"_id": question_id})
-            if doc and doc.get("times_scored", 0) > 0:
-                new_avg = doc["total_score_sum"] / doc["times_scored"]
-                col.update_one({"_id": question_id}, {"$set": {"avg_score": round(new_avg, 2)}})
     except Exception:
         pass
 
@@ -567,6 +570,11 @@ ROLE_TOPICS = {
             "How does requestAnimationFrame work? Why is it preferred over setTimeout for animations?",
             "What are Progressive Images and how do you implement a blur-up loading technique?",
             "Explain the difference between localStorage, sessionStorage, IndexedDB, and cookies. When do you use each?",
+            "Explain the semantic elements of HTML5 (header, nav, main, article, aside, footer). Why do they matter for accessibility and SEO?",
+            "What is the difference between WCAG levels A, AA, and AAA? How would you test a page for accessibility?",
+            "What is ARIA? Give examples of when you should use ARIA attributes and when you should avoid them.",
+            "Compare Redux, Context API, and Zustand for state management. When would you choose each in a React app?",
+            "How would you unit test a React component with Jest and React Testing Library? What would you mock?",
         ],
     },
     "backend developer": {
@@ -586,6 +594,10 @@ ROLE_TOPICS = {
             "What is the difference between optimistic and pessimistic locking? Give a use case for each.",
             "How do you handle graceful shutdown in a backend service? What about in-flight requests?",
             "Explain how caching invalidation strategies work. Compare write-through, write-behind, and write-around.",
+            "Explain the difference between unit, integration, and end-to-end testing for a backend service. Which layers would you mock?",
+            "What is SQL injection? How do you prevent it in your backend code (parameterized queries, ORM usage)?",
+            "How do you version a REST API and implement pagination? Compare offset vs cursor-based pagination.",
+            "How do you containerize a backend service? What is a multi-stage Docker build and why is it used?",
         ],
     },
     "full stack developer": {
@@ -605,6 +617,10 @@ ROLE_TOPICS = {
             "How would you implement role-based access control (RBAC) across frontend routes and backend APIs?",
             "Explain how you would debug a slow page load that only happens in production. What tools and techniques would you use?",
             "How do you implement dark mode across a full stack application? Cover CSS, state management, and user preferences.",
+            "Explain the rules of React hooks and common pitfalls like stale closures and incorrect dependency arrays.",
+            "What are XSS and CSRF? How do you protect a full-stack application against both?",
+            "How would you test a full-stack feature? Compare unit, integration, and E2E testing and when to use each.",
+            "How do you write an efficient SQL query with joins and indexes? How would you analyze query performance?",
         ],
     },
     "machine learning": {
@@ -624,6 +640,10 @@ ROLE_TOPICS = {
             "What is data leakage? Give examples of how it can happen and how to prevent it.",
             "Explain the difference between batch normalization and layer normalization. When do you use each?",
             "How would you deploy a machine learning model to production? Discuss monitoring for data drift and model degradation.",
+            "Describe the architecture of a CNN: convolution, pooling, and fully connected layers. Why do convolutions work well for images?",
+            "What are tokenization and embeddings in NLP? How does word2vec create word vectors?",
+            "Explain retrieval-augmented generation (RAG). How would you evaluate an LLM-powered system?",
+            "Compare logistic regression, SVM, and Naive Bayes for classification. When would you choose each?",
         ],
     },
     "data science": {
@@ -643,6 +663,10 @@ ROLE_TOPICS = {
             "Explain time series decomposition. What are trend, seasonality, and residual components?",
             "What is the difference between parametric and non-parametric statistical tests? Give examples of each.",
             "How do you build a recommendation system? Compare collaborative filtering and content-based approaches.",
+            "How would you extract, clean, and aggregate data with SQL for a business analysis task?",
+            "How do you clean and transform a dataset with pandas and NumPy? Give examples of common operations.",
+            "Explain decision trees vs gradient boosting (XGBoost). When would you use each?",
+            "Describe common probability distributions (binomial, Poisson, normal). When does each apply in real data?",
         ],
     },
     "data analyst": {
@@ -662,6 +686,10 @@ ROLE_TOPICS = {
             "What is the difference between a bar chart, histogram, and box plot? When do you use each?",
             "How do you calculate year-over-year growth and month-over-month growth in SQL?",
             "Explain the concept of statistical significance vs practical significance in business analysis.",
+            "What is a hypothesis test? Explain p-value and confidence intervals in plain language.",
+            "How would you design an A/B test for a website change? What metrics would you track?",
+            "What are CTEs and window functions in SQL? Give an example where a CTE simplifies a query.",
+            "What are DAU/MAU, retention, and funnel analysis? How do they inform product decisions?",
         ],
     },
     "python developer": {
@@ -681,6 +709,10 @@ ROLE_TOPICS = {
             "What is monkey patching and why is it dangerous? Give an example where it might be justified.",
             "Explain the difference between map, filter, and reduce. When would you use a list comprehension instead?",
             "How do you handle circular imports in Python? What design patterns help avoid them?",
+            "Explain Method Resolution Order (MRO) and multiple inheritance in Python. How does super() resolve calls?",
+            "Compare Flask and Django. When would you choose each for a backend project?",
+            "How do you write tests with pytest? Explain fixtures, parametrize, and mocking.",
+            "How do you handle file I/O and exceptions in Python? What is the with statement for?",
         ],
     },
     "ui/ux designer": {
@@ -700,6 +732,10 @@ ROLE_TOPICS = {
             "What is a user persona and how do you create one? How do personas influence design decisions?",
             "Explain the difference between UX writing and copywriting. How does microcopy affect user experience?",
             "How do you design for different screen sizes? Explain responsive, adaptive, and fluid design approaches.",
+            "How do you use Figma for design systems, reusable components, and team collaboration?",
+            "What is micro-interaction and animation design? How do they affect usability and perceived performance?",
+            "Compare iOS HIG and Material Design guidelines. When would you use each?",
+            "What is SUS (System Usability Scale)? How do you measure task success and error rates in usability testing?",
         ],
     },
     "devops engineer": {
@@ -719,6 +755,10 @@ ROLE_TOPICS = {
             "Explain how Prometheus and Grafana work together for monitoring. How do you set up meaningful alerts?",
             "What is the blast radius of a failed deployment? How do you implement circuit breakers and retry policies?",
             "How do you handle disaster recovery? Explain RTO, RPO, and backup strategies for cloud infrastructure.",
+            "Explain IAM roles and policies, VPC, and object storage (like S3) in a cloud provider. How do they interact?",
+            "What common Linux commands and shell scripting techniques do you use for ops (grep, awk, sed, systemd)?",
+            "What are Helm charts, ConfigMaps, and Ingress in Kubernetes? How do you manage configuration?",
+            "How do you aggregate logs with ELK or Loki and build dashboards? How do you correlate logs with metrics?",
         ],
     },
 }
@@ -741,6 +781,9 @@ ROLE_TOPIC_KEYWORDS = {
                              "indexeddb", "cookies"]),
         ("Browser & Network", ["cors", "preflight", "server-side", "client-side"]),
         ("SSR & Rendering", ["ssr", "ssg", "isr", "progressive image"]),
+        ("HTML & Accessibility", ["html", "semantic", "accessibility", "wcag", "aria"]),
+        ("State Management & Testing", ["redux", "context api", "zustand", "state management",
+                                        "jest", "testing library", "unit test"]),
     ],
     "backend developer": [
         ("Databases & ORMs", ["n+1", "orm", "sqlalchemy", "django", "connection pool", "transaction",
@@ -753,6 +796,10 @@ ROLE_TOPIC_KEYWORDS = {
         ("Messaging & Caching", ["message queue", "rabbitmq", "kafka", "cache", "invalidation",
                                  "write-through", "write-behind", "write-around"]),
         ("Operations & Reliability", ["graceful shutdown", "in-flight", "connection", "load balanc"]),
+        ("Testing & Security", ["unit", "integration", "end-to-end", "e2e", "sql injection",
+                                "security", "parameterized"]),
+        ("API Design & Docker", ["version", "pagination", "cursor", "offset", "docker",
+                                 "multi-stage", "containeriz"]),
     ],
     "full stack developer": [
         ("Real-time & WebSockets", ["websocket", "polling", "long-polling", "sse", "real-time"]),
@@ -762,6 +809,10 @@ ROLE_TOPIC_KEYWORDS = {
                          "presigned", "api gateway", "role-based", "rbac"]),
         ("Architecture", ["microservice", "strangler fig", "monolith", "state", "cache"]),
         ("Debugging & Performance", ["slow page load", "debugging", "debug", "performance"]),
+        ("Testing & Security", ["xss", "csrf", "unit test", "integration", "e2e", "end-to-end",
+                                "jest", "security"]),
+        ("React & SQL", ["hooks", "stale closure", "dependency array", "joins", "index",
+                         "sql query", "query performance"]),
     ],
     "machine learning": [
         ("ML Fundamentals", ["bias-variance", "model complexity", "learning curve", "overfitt",
@@ -775,6 +826,10 @@ ROLE_TOPIC_KEYWORDS = {
         ("Evaluation Metrics", ["precision", "recall", "f1", "auc", "roc"]),
         ("MLOps & Deployment", ["deploy", "production", "drift", "monitoring", "generative",
                                 "discriminative"]),
+        ("Computer Vision & NLP", ["cnn", "convolution", "pooling", "tokeniz", "embedding",
+                                   "word2vec"]),
+        ("LLMs & RAG", ["rag", "retrieval-augmented", "llm", "evaluation"]),
+        ("Classical Models", ["logistic regression", "svm", "support vector", "naive bayes"]),
     ],
     "data science": [
         ("Statistics", ["p-value", "hypothesis", "simpson", "central limit", "anova", "t-test",
@@ -788,6 +843,8 @@ ROLE_TOPIC_KEYWORDS = {
                          "forecast"]),
         ("Recommendation Systems", ["recommendation", "collaborative", "content-based"]),
         ("Analytics & Funnels", ["funnel", "drop off", "checkout", "e-commerce", "cohort"]),
+        ("SQL & Python", ["sql", "pandas", "numpy", "aggregate", "extract"]),
+        ("Distributions & Sampling", ["binomial", "poisson", "distribution", "normal"]),
     ],
     "data analyst": [
         ("SQL & Joins", ["sql", "join", "cross join", "window function", "row_number", "rank",
@@ -799,6 +856,9 @@ ROLE_TOPIC_KEYWORDS = {
         ("Business Metrics", ["year-over-year", "month-over-month", "growth", "revenue",
                               "statistical significance", "practical significance",
                               "moving average", "sma", "ema"]),
+        ("Statistics & A/B Testing", ["hypothesis", "p-value", "confidence interval", "a/b test",
+                                      "ab test", "website change"]),
+        ("Product & Business Metrics", ["dau", "mau", "retention", "funnel", "product metric"]),
     ],
     "python developer": [
         ("Python Internals", ["gil", "threading", "memory management", "reference counting",
@@ -810,6 +870,11 @@ ROLE_TOPIC_KEYWORDS = {
                              "list comprehension"]),
         ("Concurrency & Async", ["asyncio", "multiprocessing", "thread"]),
         ("Profiling & Debugging", ["profile", "memory leak", "debug"]),
+        ("OOP & Magic Methods", ["oop", "class", "mro", "multiple inheritance", "super()",
+                                 "magic method"]),
+        ("Frameworks & Testing", ["flask", "django", "fastapi", "pytest", "fixture",
+                                  "parametrize", "mock"]),
+        ("File I/O & Exceptions", ["file", "io", "with statement", "exception", "open("]),
     ],
     "ui/ux designer": [
         ("Design Process", ["double diamond", "research", "ideation", "prototyp", "user testing",
@@ -820,6 +885,9 @@ ROLE_TOPIC_KEYWORDS = {
                             "information architecture"]),
         ("UX Writing", ["ux writing", "copywriting", "microcopy"]),
         ("Responsive Design", ["responsive", "adaptive", "fluid", "screen size"]),
+        ("Design Tools & Interaction", ["figma", "micro-interaction", "animation", "motion"]),
+        ("Usability Metrics", ["sus", "system usability scale", "task success", "error rate"]),
+        ("Mobile Patterns", ["ios", "material design", "mobile"]),
     ],
     "devops engineer": [
         ("Docker & Containers", ["docker", "image", "container", "multi-stage"]),
@@ -834,7 +902,37 @@ ROLE_TOPIC_KEYWORDS = {
                            "monitoring", "alert"]),
         ("Reliability & DR", ["disaster recovery", "rto", "rpo", "backup", "circuit breaker",
                               "retry", "blast radius"]),
+        ("Cloud & Linux", ["iam", "vpc", "s3", "aws", "gcp", "azure", "grep", "awk", "sed",
+                           "systemd", "shell scripting", "linux"]),
+        ("Helm & Log Aggregation", ["helm", "configmap", "elk", "loki", "log aggregat"]),
     ],
+}
+
+
+# Har role ka coverage hint — AI prompt me inject hota hai taaki questions puri
+# domain spread (common interview topics) cover karein.
+_COVERAGE_HINTS = {
+    "frontend developer": "React & JS core, HTML semantics, CSS layout, accessibility (WCAG/ARIA), "
+        "state management, testing (Jest/RTL), browser APIs, performance, SSR/rendering, "
+        "security (XSS/CSRF)",
+    "backend developer": "databases & SQL, ORMs, API design & versioning, authentication (JWT), "
+        "caching, messaging, scaling & distributed systems, testing, security, Docker, observability",
+    "full stack developer": "React & JavaScript, CSS/HTML, state management, frontend-backend APIs, "
+        "auth, databases & SQL, testing, security (XSS/CSRF), deployment, performance",
+    "machine learning": "ML fundamentals, classical algorithms (regression/SVM/Naive Bayes), "
+        "deep learning, CNN/computer vision, NLP & embeddings, LLMs & RAG, evaluation metrics, MLOps",
+    "data science": "statistics & inference, probability distributions, experiments (A/B testing), "
+        "SQL & data wrangling, pandas/NumPy, ML models, causal analysis, time series",
+    "data analyst": "SQL (joins/windows/CTEs), statistics (hypothesis tests), A/B testing, "
+        "data cleaning, dashboards, business & product metrics, data storytelling",
+    "python developer": "Python internals (GIL/memory), core constructs (generators/decorators), "
+        "OOP & magic methods, web frameworks, testing (pytest), file I/O & exceptions, async, "
+        "packaging",
+    "ui/ux designer": "design process & research, design principles & heuristics, design systems "
+        "& tools (Figma), accessibility, interaction & animation, mobile patterns, usability "
+        "testing & metrics",
+    "devops engineer": "Docker & containers, Kubernetes, cloud (IAM/VPC/storage), Linux & shell, "
+        "CI/CD, Infrastructure as Code, observability, Helm & config, reliability & DR",
 }
 
 
@@ -1092,6 +1190,13 @@ def _generate_technical_questions(role, num_q=8, seed=None, user_id=None, resume
             role_key = key
             break
 
+    coverage_hint = f"- Questions should cover different subtopics within {role}"
+    if role_key and _COVERAGE_HINTS.get(role_key):
+        coverage_hint = (
+            "- Cover a broad spread of subtopics across the questions, including: "
+            + _COVERAGE_HINTS[role_key]
+        )
+
     if role_key:
         topic_pool = ROLE_TOPICS[role_key]["technical"]
     else:
@@ -1133,7 +1238,7 @@ STRICT RULES:
 - At least {max(3, num_q // 2)} questions must be directly based on the candidate's resume skills and projects
 - Questions must require the candidate to explain HOW or WHY, not just WHAT
 - No filler questions — every question must test a concrete technical skill
-- Questions should cover different subtopics within {role}
+{coverage_hint}
 - Appropriate difficulty for an internship level candidate
 - Each question should feel like it belongs in a real {role} technical interview
 
@@ -1165,7 +1270,7 @@ STRICT RULES:
 - Questions must test SPECIFIC knowledge related to {role} — not generic opinions
 - Questions must require the candidate to explain HOW or WHY, not just WHAT
 - No filler questions — every question must test a concrete technical skill
-- Questions should cover different subtopics within {role}
+{coverage_hint}
 - Appropriate difficulty for an internship level (fresher / final year student)
 - Questions should vary each session based on the seed
 - Each question should feel like it belongs in a real {role} technical interview
@@ -1344,19 +1449,18 @@ def _FALLBACK_PROBLEMS(difficulty):
                 "python": "def solution(nums, target):",
                 "java": "public int[] solution(int[] nums, int target)",
                 "cpp": "vector<int> solution(vector<int>& nums, int target)",
-                "c": "int* solution(int* nums, int n, int target, int* returnSize)"
+                "c": "void solution(int nums[], int n, int target, int result[], int* resultSize)"
             },
-            "examples": [{"input": "[2, 7, 11, 15]\n9", "output": "[0,1]", "explanation": "nums[0] + nums[1] = 2 + 7 = 9, so we return [0, 1]."}],
+            "examples": [{"input": "[2, 7, 11, 15]\n9", "output": "[0,1]", "explanation": "We use a hash map to store each element's index. For 7, we find 2 already in the map at index 0, so we return [0, 1]."}, {"input": "[3, 2, 4]\n6", "output": "[1,2]", "explanation": "We iterate and store each element. When we reach 4, its complement 2 is already in the map at index 1, so we return [1, 2]."}],
             "constraints": ["2 <= nums.length <= 10^4", "-10^9 <= nums[i] <= 10^9", "Only one valid answer exists"],
             "starter_code": {
-                "python": "def solution(nums, target):\n    # Write your code here\n    pass",
-                "javascript": "function solution(nums, target) {\n  // Write your code here\n}",
+                "python": "def solution(nums, target):\n    # Write your code here\n    return []",
                 "java": "class Solution {\n    public int[] solution(int[] nums, int target) {\n        // Write your code here\n        return new int[]{};\n    }\n}",
                 "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nvector<int> solution(vector<int>& nums, int target) {\n    // Write your code here\n    return {};\n}",
-                "c": "#include<stdio.h>\nint* solution(int* nums, int n, int target, int* returnSize) {\n    // Write your code here\n    *returnSize = 0;\n    return NULL;\n}"
+                "c": "#include<stdio.h>\nvoid solution(int nums[], int n, int target, int result[], int* resultSize) {\n    // Write your code here\n    *resultSize = 0;\n}"
             },
             "test_cases": [
-                {"input": "[2,7,11,15]\n9", "expected": "[0,1]"},
+                {"input": "[1,4,3,6]\n7", "expected": "[1,2]"},
                 {"input": "[3,2,4]\n6", "expected": "[1,2]"},
                 {"input": "[3,3]\n6", "expected": "[0,1]"}
             ],
@@ -1371,19 +1475,18 @@ def _FALLBACK_PROBLEMS(difficulty):
                 "python": "def solution(s):",
                 "java": "public String solution(String s)",
                 "cpp": "string solution(string s)",
-                "c": "char* solution(char* s)"
+                "c": "void solution(char s[])"
             },
-            "examples": [{"input": "hello", "output": "olleh", "explanation": "Reverse the characters in the string."}],
+            "examples": [{"input": "hello", "output": "olleh", "explanation": "We use two pointers from both ends, swapping characters and moving toward the center. 'h' swaps with 'o', 'e' swaps with 'l', producing 'olleh'."}, {"input": "abcdef", "output": "fedcba", "explanation": "We swap characters from both ends: a<->f, b<->e, c<->d. This reverses the entire string to 'fedcba'."}],
             "constraints": ["1 <= s.length <= 10^5", "s[i] is a printable ascii character"],
             "starter_code": {
-                "python": "def solution(s):\n    # Write your code here\n    pass",
-                "javascript": "function solution(s) {\n  // Write your code here\n}",
+                "python": "def solution(s):\n    # Write your code here\n    return \"\"",
                 "java": "class Solution {\n    public String solution(String s) {\n        // Write your code here\n        return \"\";\n    }\n}",
                 "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nstring solution(string s) {\n    // Write your code here\n    return \"\";\n}",
-                "c": "#include<stdio.h>\n#include<string.h>\nchar* solution(char* s) {\n    // Write your code here\n    return s;\n}"
+                "c": "#include<stdio.h>\n#include<string.h>\nvoid solution(char s[]) {\n    // Write your code here\n}"
             },
             "test_cases": [
-                {"input": "hello", "expected": "olleh"},
+                {"input": "python", "expected": "nohtyp"},
                 {"input": "Hannah", "expected": "hannaH"},
                 {"input": "a", "expected": "a"}
             ],
@@ -1400,17 +1503,16 @@ def _FALLBACK_PROBLEMS(difficulty):
                 "cpp": "bool solution(string s)",
                 "c": "int solution(char* s)"
             },
-            "examples": [{"input": "()[]{}", "output": "true", "explanation": "All brackets are properly closed in order."}],
+            "examples": [{"input": "()[]{}", "output": "true", "explanation": "We use a stack to track opening brackets. Each closing bracket matches the most recent opening bracket of the same type. All brackets are properly closed in order."}, {"input": "(]", "output": "false", "explanation": "We push '(' onto the stack, then encounter ']' which does not match '(' (round bracket). Since the brackets are mismatched, the string is invalid."}],
             "constraints": ["1 <= s.length <= 10^4", "s consists of parentheses only '()[]{}'"],
             "starter_code": {
-                "python": "def solution(s):\n    # Write your code here\n    pass",
-                "javascript": "function solution(s) {\n  // Write your code here\n}",
+                "python": "def solution(s):\n    # Write your code here\n    return False",
                 "java": "class Solution {\n    public boolean solution(String s) {\n        // Write your code here\n        return false;\n    }\n}",
                 "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nbool solution(string s) {\n    // Write your code here\n    return false;\n}",
                 "c": "#include<stdio.h>\n#include<stdbool.h>\nint solution(char* s) {\n    // Write your code here\n    return 0;\n}"
             },
             "test_cases": [
-                {"input": "()", "expected": "true"},
+                {"input": "{[()]}", "expected": "true"},
                 {"input": "()[]{}", "expected": "true"},
                 {"input": "(]", "expected": "false"}
             ],
@@ -1427,17 +1529,16 @@ def _FALLBACK_PROBLEMS(difficulty):
                 "cpp": "bool solution(string s)",
                 "c": "int solution(char* s)"
             },
-            "examples": [{"input": "A man, a plan, a canal: Panama", "output": "true", "explanation": "After removing non-alphanumeric characters and ignoring case, it reads 'amanaplanacanalpanama' which is a palindrome."}],
+            "examples": [{"input": "A man, a plan, a canal: Panama", "output": "true", "explanation": "After removing non-alphanumeric characters and ignoring case, it reads 'amanaplanacanalpanama' which is a palindrome."}, {"input": "race a car", "output": "false", "explanation": "After removing non-alphanumeric characters, 'raceacar' is not a palindrome."}],
             "constraints": ["1 <= s.length <= 2 * 10^5", "s consists only of printable ASCII characters"],
             "starter_code": {
-                "python": "def solution(s):\n    # Write your code here\n    pass",
-                "javascript": "function solution(s) {\n  // Write your code here\n}",
+                "python": "def solution(s):\n    # Write your code here\n    return False",
                 "java": "class Solution {\n    public boolean solution(String s) {\n        // Write your code here\n        return false;\n    }\n}",
                 "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nbool solution(string s) {\n    // Write your code here\n    return false;\n}",
                 "c": "#include<stdio.h>\n#include<stdbool.h>\nint solution(char* s) {\n    // Write your code here\n    return 0;\n}"
             },
             "test_cases": [
-                {"input": "A man, a plan, a canal: Panama", "expected": "true"},
+                {"input": "Was it a car or a cat I saw", "expected": "true"},
                 {"input": "race a car", "expected": "false"},
                 {"input": " ", "expected": "true"}
             ],
@@ -1454,19 +1555,18 @@ def _FALLBACK_PROBLEMS(difficulty):
                 "cpp": "int solution(vector<int>& nums)",
                 "c": "int solution(int* nums, int n)"
             },
-            "examples": [{"input": "[-2,1,-3,4,-1,2,1,-5,4]", "output": "6", "explanation": "The subarray [4,-1,2,1] has the largest sum of 6."}],
+            "examples": [{"input": "[-2,1,-3,4,-1,2,1,-5,4]", "output": "6", "explanation": "Using Kadane's algorithm, we track the current sum. Starting at -2, we reset at each negative prefix. The maximum subarray [4,-1,2,1] has sum 6."}, {"input": "[1]", "output": "1", "explanation": "With a single element, the maximum subarray is the element itself, giving sum 1."}],
             "constraints": ["1 <= nums.length <= 10^5", "-10^4 <= nums[i] <= 10^4"],
             "starter_code": {
-                "python": "def solution(nums):\n    # Write your code here\n    pass",
-                "javascript": "function solution(nums) {\n  // Write your code here\n}",
+                "python": "def solution(nums):\n    # Write your code here\n    return 0",
                 "java": "class Solution {\n    public int solution(int[] nums) {\n        // Write your code here\n        return 0;\n    }\n}",
                 "cpp": "#include<bits/stdc++.h>\nusing namespace std;\nint solution(vector<int>& nums) {\n    // Write your code here\n    return 0;\n}",
                 "c": "#include<stdio.h>\nint solution(int* nums, int n) {\n    // Write your code here\n    return 0;\n}"
             },
             "test_cases": [
-                {"input": "[-2,1,-3,4,-1,2,1,-5,4]", "expected": "6"},
+                {"input": "[5,4,-1,7,8]", "expected": "23"},
                 {"input": "[1]", "expected": "1"},
-                {"input": "[5,4,-1,7,8]", "expected": "23"}
+                {"input": "[-2,1,-3,4,-1,2,1,-5,4]", "expected": "6"}
             ],
             "hints": ["Keep track of current sum and reset it if it becomes negative.", "Update max sum at each step."],
             "difficulty": difficulty,
@@ -1495,7 +1595,17 @@ def generate_coding_problems(role, difficulty="medium", count=20):
                     problems.append(copy.deepcopy(item))
 
     if problems:
-        return problems[:count]
+        seen, unique = set(), []
+        for p in problems:
+            if not _is_runnable_problem(p):
+                continue
+            title = (p.get("title") or "").strip()
+            if title in seen:
+                continue
+            seen.add(title)
+            unique.append(p)
+        if unique:
+            return unique[:count]
 
     return [generate_coding_problem(role, difficulty) for _ in range(count)]
 
@@ -1535,39 +1645,50 @@ Create a unique coding problem that:
 - Seed ensures the problem is different each time
 
 CRITICAL RULES for code and test cases:
-- The function name MUST be "solution" in ALL languages (python, java, cpp, c, javascript)
+- The function name MUST be "solution" in ALL languages (python, java, cpp, c)
 - Starter code should define ONLY the function (no main, no driver code). User writes only the function body.
 - Test case input: Each parameter on a SEPARATE LINE. Use JSON format for arrays/objects.
   Examples: "[1,2,3]" for array, "hello" for string, "42" for number, "true" for boolean
 - Test case expected: The EXACT output the function should return, as a single JSON value.
   Examples: "[0,1]" for array, "true" for boolean, "6" for number
 - NEVER use Python-style lists with single quotes in test cases. Always use JSON (double quotes).
-- For C: When returning an array (int*, long*, double*), ALWAYS add "int* returnSize" as the LAST parameter. The driver passes a pointer to an int that the function fills with the array length. Set *returnSize before returning.
+- For C: Use simple college-level signatures. For scalar returns (int, bool, char), use: `int solution(int n)`. For array returns, use output parameters: `void solution(int nums[], int n, int target, int result[], int* resultSize)` where result[] is a pre-allocated output buffer and resultSize is set by the function. NEVER use `int*` return type or `malloc` in C.
+- For Python: NEVER use `pass` as the function body in starter code. Always include a proper return statement: `return []` for arrays, `return ""` for strings, `return 0` for int, `return False` for bool, `return None` for objects/trees, `pass` only for void/in-place functions.
+- CRITICAL: test_cases MUST use DIFFERENT inputs than examples. NEVER copy example inputs into test_cases. The test_cases are hidden and must not overlap with the visible examples.
+- CRITICAL: Each explanation in "examples" must be a detailed paragraph explaining the APPROACH, not just restating the output. Format: "We [do X] which gives [result]. Therefore [conclusion]."
+
+MANDATORY FIELDS:
+- "examples": MUST contain EXACTLY 2 examples (Example 1 and Example 2). Each example must have "input", "output", and "explanation".
+- "test_cases": MUST contain EXACTLY 3 hidden test cases. Each test case must have "input" and "expected". These inputs MUST be completely different from the example inputs.
 
 Return ONLY valid JSON with no extra text:
 {{
   "title": "Problem Title",
-  "description": "Clear and detailed problem description in 2-3 paragraphs",
+  "description": "Clear problem description with 2-3 paragraphs. Include: (1) What the function should do, (2) Input/output format with examples, (3) Edge cases and constraints the user should consider. Make it educational like LeetCode.",
   "function_signature": {{
     "python": "def solution(nums, target):",
-    "javascript": "function solution(nums, target)",
     "java": "public int[] solution(int[] nums, int target)",
     "cpp": "vector<int> solution(vector<int>& nums, int target)",
-    "c": "int* solution(int* nums, int n, int target, int* returnSize)"
+    "c": "void solution(int nums[], int n, int target, int result[], int* resultSize)"
   }},
   "examples": [
     {{
       "input": "example input (one param per line)",
       "output": "expected output",
-      "explanation": "step by step explanation"
+      "explanation": "Detailed step-by-step explanation. Format: 'We [do X] which gives [result]. Therefore [conclusion].' Never use vague one-liners."
+    }},
+    {{
+      "input": "second example input (one param per line)",
+      "output": "expected output",
+      "explanation": "Detailed step-by-step explanation. Format: 'We [do X] which gives [result]. Therefore [conclusion].' Never use vague one-liners."
     }}
   ],
   "constraints": ["constraint 1", "constraint 2", "constraint 3"],
   "starter_code": {{
-    "python": "def solution(nums, target):\\n    # Write your code here\\n    pass",
+    "python": "def solution(nums, target):\\n    # Write your code here\\n    return []",
     "java": "class Solution {{\\n    public int[] solution(int[] nums, int target) {{\\n        // Write your code here\\n        return new int[]{{}};\\n    }}\\n}}",
     "cpp": "#include<bits/stdc++.h>\\nusing namespace std;\\nvector<int> solution(vector<int>& nums, int target) {{\\n    // Write your code here\\n    return {{}};\\n}}",
-    "c": "#include<stdio.h>\\nint* solution(int* nums, int n, int target, int* returnSize) {{\\n    // Write your code here\\n    *returnSize = 0;\\n    return NULL;\\n}}"
+    "c": "#include<stdio.h>\\nvoid solution(int nums[], int n, int target, int result[], int* resultSize) {{\\n    // Write your code here\\n    *resultSize = 0;\\n}}"
   }},
   "test_cases": [
     {{"input": "param1_value\\nparam2_value", "expected": "expected_output"}},

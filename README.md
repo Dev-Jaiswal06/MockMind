@@ -50,7 +50,7 @@ The platform addresses a critical gap in interview preparation by offering:
 ## ✨ Features
 
 ### 🤖 AI Interview Module
-- 100% AI-generated questions using Google Gemini 2.0 Flash
+- 100% AI-generated questions using Google Gemini 3.5 Flash
 - Two interview modes: **Role-Based** and **Resume-Based**
 - Support for 9 job roles (Frontend, Backend, Full Stack, ML, Data Science, etc.)
 - Fresh unique questions every session using session seeding

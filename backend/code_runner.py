@@ -11,7 +11,6 @@ JUDGE0_SUBMIT = f"{JUDGE0_BASE}/submissions"
 # Judge0 language IDs (latest GCC/versions)
 LANGS = {
     "python":     {"id": 92,  "name": "Python 3.11.2"},
-    "javascript": {"id": 93,  "name": "Node.js 18.15.0"},
     "java":       {"id": 62,  "name": "Java OpenJDK 13.0.1"},
     "cpp":        {"id": 54,  "name": "C++ GCC 9.4.0"},
     "c":          {"id": 50,  "name": "C GCC 9.2.0"},
