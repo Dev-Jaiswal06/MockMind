@@ -3,7 +3,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from collections import defaultdict
-from models import coding_col, update_user_stats
+from models import coding_col, update_user_stats, get_user_by_identity
 from ai_engine import generate_coding_problem, generate_coding_problems, _update_coding_attempted
 from code_runner import run_with_piston
 from driver_code import wrap_with_driver, normalize_output
@@ -12,6 +12,23 @@ from datetime import datetime
 logger = logging.getLogger("coding")
 
 coding_bp = Blueprint("coding", __name__)
+
+
+# ── Run meta helper (Judge0 runtime/memory) ──
+def _run_meta(r):
+    return {
+        "runtime_ms": max(0, round((r.get("run_time") or 0) * 1000)),
+        "memory_kb":  max(0, int(r.get("run_memory_kb") or 0)),
+    }
+
+
+def _run_aggregates(results):
+    run_times = [x.get("runtime_ms", 0) for x in results if x.get("runtime_ms", 0) > 0]
+    mem_kbs   = [x.get("memory_kb", 0)  for x in results if x.get("memory_kb", 0)  > 0]
+    return {
+        "runtime_avg_ms": round(sum(run_times) / len(run_times)) if run_times else 0,
+        "memory_avg_mb":  round(sum(mem_kbs) / (len(mem_kbs) * 1024), 1) if mem_kbs else 0,
+    }
 
 
 @coding_bp.route("/api/coding/health", methods=["GET"])
@@ -125,6 +142,7 @@ def run_cases():
                     "expected": tc.get("expected", "").strip(), "got": "",
                     "passed": False, "status": "Compilation Error",
                     "error_message": compile_error,
+                    "runtime_ms": 0, "memory_kb": 0,
                 })
                 continue
 
@@ -156,6 +174,7 @@ def run_cases():
                     "expected": expected_normalized, "got": got_normalized,
                     "passed": False, "status": "Compilation Error",
                     "error_message": compile_error,
+                    **_run_meta(r),
                 })
                 continue
 
@@ -167,6 +186,7 @@ def run_cases():
                     "expected": expected_normalized, "got": got_normalized,
                     "passed": False, "status": "Runtime Error",
                     "error_message": error_msg,
+                    **_run_meta(r),
                 })
                 continue
 
@@ -200,14 +220,18 @@ def run_cases():
                 "test_case": i + 1, "input": raw_input,
                 "expected": expected_normalized, "got": got_normalized,
                 "passed": ok, "status": tc_status, "error_message": error_msg,
+                **_run_meta(r),
             })
 
+        agg = _run_aggregates(results)
         logger.info(f"\n=== RUN RESULT: {passed}/{len(tcs)} passed ===")
         return jsonify({
             "results":    results,
             "passed":     passed,
             "total":      len(tcs),
             "all_passed": passed == len(tcs),
+            "runtime_avg_ms": agg["runtime_avg_ms"],
+            "memory_avg_mb":  agg["memory_avg_mb"],
         })
 
     except Exception as e:
@@ -268,6 +292,7 @@ def submit_code():
                 "passed":        False,
                 "status":        "Compilation Error",
                 "error_message": compile_error,
+                "runtime_ms": 0, "memory_kb": 0,
             })
             continue
 
@@ -303,6 +328,7 @@ def submit_code():
                 "passed":        False,
                 "status":        "Compilation Error",
                 "error_message": compile_error,
+                **_run_meta(r),
             })
             continue
 
@@ -318,6 +344,7 @@ def submit_code():
                 "passed":        False,
                 "status":        "Runtime Error",
                 "error_message": error_msg,
+                **_run_meta(r),
             })
             continue
 
@@ -356,8 +383,10 @@ def submit_code():
             "passed":        ok,
             "status":        tc_status,
             "error_message": error_msg,
+            **_run_meta(r),
         })
 
+    agg = _run_aggregates(results)
     score = round((passed / len(tcs) * 100), 1) if tcs else 0
 
     if compile_error:
@@ -373,8 +402,12 @@ def submit_code():
 
     logger.info(f"\n=== SUBMIT RESULT: {overall_status}, {score}%, {passed}/{len(tcs)} ===")
 
+    user_doc = get_user_by_identity(uid) or {}
+
     coding_col.insert_one({
         "user_id":       uid,
+        "user_name":     user_doc.get("name", ""),
+        "user_email":    user_doc.get("email", ""),
         "problem_title": title,
         "language":      lang,
         "code_submitted": code,
@@ -396,4 +429,6 @@ def submit_code():
         "score":          score,
         "all_passed":     passed == len(tcs),
         "overall_status": overall_status,
+        "runtime_avg_ms": agg["runtime_avg_ms"],
+        "memory_avg_mb":  agg["memory_avg_mb"],
     })

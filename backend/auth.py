@@ -1,9 +1,8 @@
 ﻿# backend/auth.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from models import users_col, stats_col, password_resets_col, email_verifications_col
+from models import users_col, stats_col, password_resets_col, email_verifications_col, next_user_seq, get_user_by_identity
 from datetime import datetime, timedelta
-from bson import ObjectId
 from email_utils import send_reset_email, send_verification_email, validate_email_address
 import bcrypt
 import secrets
@@ -21,8 +20,8 @@ def signup():
 
     if not all([name, email, password]):
         return jsonify({"error": "All fields are required!"}), 400
-    if len(password) < 6:
-        return jsonify({"error": "Password must be at least 6 characters!"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters!"}), 400
 
     existing = users_col.find_one({"email": email})
     if existing and existing.get("is_email_verified", True):
@@ -34,6 +33,8 @@ def signup():
     if existing:
         users_col.delete_one({"_id": existing["_id"]})
         stats_col.delete_one({"user_id": str(existing["_id"])})
+        if existing.get("uid"):
+            stats_col.delete_one({"user_id": existing["uid"]})
         email_verifications_col.delete_many({"email": email})
 
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -53,7 +54,9 @@ def signup():
         email_verifications_col.delete_many({"email": email})
         return jsonify({"error": "Please check whether the email address is valid or not."}), 400
 
+    uid = f"MM-{next_user_seq():04d}"
     result  = users_col.insert_one({
+        "uid":               uid,
         "name":              name,
         "email":             email,
         "password_hash":     hashed,
@@ -63,9 +66,9 @@ def signup():
     user_id = str(result.inserted_id)
 
     stats_col.update_one(
-        {"user_id": user_id},
+        {"user_id": uid},
         {"$setOnInsert": {
-            "user_id":             user_id,
+            "user_id":             uid,
             "total_interviews":    0,
             "total_coding":        0,
             "avg_interview_score": 0,
@@ -78,7 +81,7 @@ def signup():
 
     return jsonify({
         "message": f"A verification code has been sent to {email}. Please verify your email to activate your account.",
-        "user":    {"id": user_id, "name": name, "email": email}
+        "user":    {"id": user_id, "uid": uid, "name": name, "email": email}
     }), 201
 
 
@@ -110,7 +113,15 @@ def verify_otp():
         {"$set": {"used": True}}
     )
 
-    return jsonify({"message": "Email verified successfully! You can now log in."}), 200
+    user    = users_col.find_one({"email": email})
+    user_id = user.get("uid") or str(user["_id"])
+    token   = create_access_token(identity=user_id)
+
+    return jsonify({
+        "message": "Email verified successfully! Welcome to MockMind!",
+        "token":   token,
+        "user":    {"id": user_id, "name": user["name"], "email": user["email"]}
+    }), 200
 
 
 # â”€â”€ RESEND VERIFICATION CODE â”€â”€
@@ -161,7 +172,7 @@ def login():
     if not user.get("is_email_verified", True):
         return jsonify({"error": "Please verify your email before logging in."}), 403
 
-    user_id = str(user["_id"])
+    user_id = user.get("uid") or str(user["_id"])
     token   = create_access_token(identity=user_id)
     return jsonify({
         "message": f"Welcome back, {user['name']}!",
@@ -174,13 +185,13 @@ def login():
 @jwt_required()
 def get_me():
     user_id = get_jwt_identity()
-    user    = users_col.find_one({"_id": ObjectId(user_id)})
+    user    = get_user_by_identity(user_id)
     stats   = stats_col.find_one({"user_id": user_id})
     if not user:
         return jsonify({"error": "User not found"}), 404
     return jsonify({
         "user": {
-            "id":         str(user["_id"]),
+            "id":         user.get("uid") or str(user["_id"]),
             "name":       user["name"],
             "email":      user["email"],
             "created_at": user.get("created_at", "")

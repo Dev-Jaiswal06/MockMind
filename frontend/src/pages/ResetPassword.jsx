@@ -6,6 +6,18 @@ import API                   from "../utils/api"
 import toast                 from "react-hot-toast"
 import RobotAnimation        from "../components/RobotAnimation"
 
+const getPasswordStrength = (pw) => {
+  if (!pw) return { score: 0, label: "", color: "var(--t3)" }
+  let s = 0
+  if (pw.length >= 8) s++
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++
+  if (/\d/.test(pw)) s++
+  if (/[^A-Za-z0-9]/.test(pw)) s++
+  if (s <= 1)   return { score: s, label: "Weak",   color: "var(--err)" }
+  if (s === 2)  return { score: s, label: "Medium", color: "var(--s)" }
+  return { score: s, label: "Strong", color: "var(--ok)" }
+}
+
 export default function ResetPassword() {
   const [searchParams] = useSearchParams()
   const navigate       = useNavigate()
@@ -16,9 +28,10 @@ export default function ResetPassword() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm,  setShowConfirm]  = useState(false)
   const [loading, setLoading]         = useState(false)
-  const [done, setDone]               = useState(false)
 
-  const isValid = password.length >= 8 && password === confirm
+  const isValid      = password.length >= 8 && password === confirm
+  const strength     = getPasswordStrength(password)
+  const strengthBars = strength.score === 0 ? 1 : Math.min(strength.score, 3)
 
   const onSubmit = async (e) => {
     e.preventDefault()
@@ -33,8 +46,8 @@ export default function ResetPassword() {
     setLoading(true)
     try {
       await API.post("/api/auth/reset-password", { token, password })
-      setDone(true)
-      toast.success("Password updated!")
+      toast.success("Password reset successfully. You can now sign in.")
+      navigate("/login", { replace: true })
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to reset password.")
     } finally {
@@ -107,27 +120,14 @@ export default function ResetPassword() {
             <span style={{ marginLeft: "4px" }}>🧠</span>
           </div>
           <h1 style={{ fontSize: "1.7rem", fontWeight: 800, marginBottom: "6px" }}>
-            {done ? "All Done!" : "Set New Password"}
+            Set New Password
           </h1>
           <p style={{ color: "var(--t2)", fontSize: ".9rem" }}>
-            {done
-              ? "Your password has been updated successfully."
-              : "Choose a strong password — minimum 8 characters."
-            }
+            Choose a strong password — minimum 8 characters.
           </p>
         </div>
 
-        {done ? (
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "3rem", marginBottom: "16px" }}>✅</div>
-            <Link to="/login">
-              <button className="btn btnp" style={{ padding: "14px 28px", fontSize: "1rem" }}>
-                Sign In with New Password
-              </button>
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {/* New Password */}
             <div>
               <label style={{
@@ -155,6 +155,28 @@ export default function ResetPassword() {
                   {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
                 </button>
               </div>
+
+              {password.length > 0 && (
+                <div style={{ marginTop: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ display: "flex", gap: "4px", flex: 1, maxWidth: "120px" }}>
+                      {[0,1,2].map(i => (
+                        <div key={i} style={{
+                          flex: 1, height: "4px", borderRadius: "2px",
+                          background: i < strengthBars ? strength.color : "var(--bg3)",
+                          transition: "background .3s"
+                        }}/>
+                      ))}
+                    </div>
+                    <span style={{ fontSize: ".8rem", fontWeight: 700, color: strength.color }}>
+                      {strength.label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: ".8rem", color: "var(--t3)", marginTop: "5px" }}>
+                    Use 8+ chars, mix letters &amp; numbers
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Confirm Password */}
@@ -206,7 +228,6 @@ export default function ResetPassword() {
                 : "Reset Password"}
             </motion.button>
           </form>
-        )}
 
         <p style={{ textAlign:"center", marginTop:"20px", fontSize:".88rem" }}>
           <Link to="/login" style={{ color:"var(--pl)", fontWeight:600, textDecoration:"none" }}>

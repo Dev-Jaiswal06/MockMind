@@ -1,7 +1,7 @@
 # backend/interview.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import sessions_col, qa_col, update_user_stats
+from models import sessions_col, qa_col, update_user_stats, get_user_by_identity
 from ai_engine import generate_questions, evaluate_answers_batch, generate_report, _record_weak_topics
 from resume_parser import parse_resume
 from datetime import datetime
@@ -51,8 +51,12 @@ def start_interview():
         user_id=user_id
     )
 
+    user_doc = get_user_by_identity(user_id) or {}
+
     sid = str(sessions_col.insert_one({
-        "user_id": user_id, "role": role, "interview_type": i_type,
+        "user_id": user_id, "user_name": user_doc.get("name", ""),
+        "user_email": user_doc.get("email", ""),
+        "role": role, "interview_type": i_type,
         "round_type": round_type,
         "hr_count": 6 if round_type == "mixed" else 0,
         "resume_text": resume_text, "total_questions": len(qs),
@@ -78,6 +82,7 @@ def submit_answer():
         "user_id":        user_id,
         "question":       d.get("question"),
         "answer":         d.get("answer", ""),
+        "example":        d.get("example", ""),
         "score":          0,
         "feedback":       "",
         "good_points":    "",
@@ -100,7 +105,7 @@ def complete_interview():
     rows  = list(qa_col.find({"session_id": sid}, sort=[("question_index",1)]))
 
     # Batch evaluation — saare answers ek hi AI call me
-    qa_data = [{"question": r.get("question",""), "answer": r.get("answer","")} for r in rows]
+    qa_data = [{"question": r.get("question",""), "answer": r.get("answer",""), "example": r.get("example","")} for r in rows]
     evals   = evaluate_answers_batch(qa_data, role)
 
     # Scores + feedback wapas DB me save karo
@@ -137,7 +142,8 @@ def complete_interview():
     sessions_col.update_one(
         {"_id": ObjectId(sid)},
         {"$set": {"completed":True,"total_score":total,
-                  "percentage":pct,"grade":grade,"time_taken":d.get("time_taken",0)}}
+                  "percentage":pct,"grade":grade,"time_taken":d.get("time_taken",0),
+                  "skills_breakdown": report.get("skills_breakdown", [])}}
     )
     update_user_stats(user_id)
     return jsonify({"success":True,"total_score":total,"max_score":mx,

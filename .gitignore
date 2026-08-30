@@ -41,6 +41,9 @@ frontend/dist/
 frontend/build/
 frontend/.vite/
 
+# Local rollback backups
+backups/
+
 # IDE
 .vscode/
 .idea/

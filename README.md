@@ -42,7 +42,7 @@
 The platform addresses a critical gap in interview preparation by offering:
 - **Dynamic AI question generation** — no two sessions are identical
 - **Resume-based personalization** — questions tailored to the candidate's skill set
-- **Real-time code execution** — live coding environment with 5 programming languages
+- **Real-time code execution** — live coding environment with 4 programming languages
 - **Hybrid evaluation engine** — combining Google Gemini AI with TF-IDF cosine similarity scoring
 
 ---
@@ -59,7 +59,7 @@ The platform addresses a critical gap in interview preparation by offering:
 ### 💻 Coding Assessment Module
 - AI-generated coding problems based on selected role and difficulty
 - Monaco Editor (VS Code-like) for code writing
-- Support for **5 programming languages**: Python, JavaScript, Java, C++, C
+- Support for **4 programming languages**: Python, Java, C++, C
 - Real-time code execution via **Judge0 API** (free cloud instance)
 - Automated test case validation with pass/fail results
 

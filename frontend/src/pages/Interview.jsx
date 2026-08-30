@@ -2,18 +2,23 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence }      from "framer-motion"
 import API                              from "../utils/api"
 import toast                            from "react-hot-toast"
+import {
+  LuBadgeCheck, LuBrain, LuChartColumn, LuChartLine, LuCheck, LuCode,
+  LuFileText, LuLayers, LuMessageSquare, LuPalette, LuPlus, LuRocket, LuServer,
+  LuTarget, LuTerminal, LuWorkflow, LuWrench
+} from "react-icons/lu"
 
 // ── Job Roles ──
 const ROLES = [
-  { id:"frontend",    label:"Frontend Developer",   icon:"⚛️" },
-  { id:"backend",     label:"Backend Developer",    icon:"🟩" },
-  { id:"fullstack",   label:"Full Stack Developer", icon:"💻" },
-  { id:"ml",          label:"Machine Learning",     icon:"🤖" },
-  { id:"datascience", label:"Data Science",         icon:"📊" },
-  { id:"analyst",     label:"Data Analyst",         icon:"📈" },
-  { id:"python",      label:"Python Developer",     icon:"🐍" },
-  { id:"uiux",        label:"UI/UX Designer",       icon:"🎨" },
-  { id:"devops",      label:"DevOps Engineer",      icon:"⚙️" },
+  { id:"frontend",    label:"Frontend Developer",   icon:<LuCode size={20}/> },
+  { id:"backend",     label:"Backend Developer",    icon:<LuServer size={20}/> },
+  { id:"fullstack",   label:"Full Stack Developer", icon:<LuLayers size={20}/> },
+  { id:"ml",          label:"Machine Learning",     icon:<LuBrain size={20}/> },
+  { id:"datascience", label:"Data Science",         icon:<LuChartColumn size={20}/> },
+  { id:"analyst",     label:"Data Analyst",         icon:<LuChartLine size={20}/> },
+  { id:"python",      label:"Python Developer",     icon:<LuTerminal size={20}/> },
+  { id:"uiux",        label:"UI/UX Designer",       icon:<LuPalette size={20}/> },
+  { id:"devops",      label:"DevOps Engineer",      icon:<LuWorkflow size={20}/> },
 ]
 
 // ── Interview Types / Rounds ──
@@ -21,19 +26,19 @@ const TYPES = [
   {
     id:    "role",
     label: "Role Based",
-    icon:  "🎯",
+    icon:  <LuTarget size={20}/>,
     desc:  "Questions based on selected job role."
   },
   {
     id:    "resume",
     label: "Resume Based",
-    icon:  "📄",
+    icon:  <LuFileText size={20}/>,
     desc:  "Questions based on your resume skills"
   },
   {
     id:    "both",
     label: "Combined",
-    icon:  "🔥",
+    icon:  <LuLayers size={20}/>,
     desc:  "Role + Resume based questions"
   },
 ]
@@ -42,19 +47,19 @@ const ROUNDS = [
   {
     id:    "hr",
     label: "HR Round",
-    icon:  "💬",
+    icon:  <LuMessageSquare size={20}/>,
     desc:  "Behavioral and HR-style questions"
   },
   {
     id:    "technical",
     label: "Technical Round",
-    icon:  "🛠️",
+    icon:  <LuWrench size={20}/>,
     desc:  "Technical questions related to your selected role"
   },
   {
     id:    "mixed",
     label: "Mixed Round",
-    icon:  "🔥",
+    icon:  <LuLayers size={20}/>,
     desc:  "HR + Technical combined (fixed 15 questions)"
   },
 ]
@@ -81,6 +86,8 @@ export default function Interview() {
   const [selectedRound, setRound] = useState("hr")
   const [resumeFile,   setResume] = useState(null)
   const [numQuestions, setNumQ]   = useState(10)
+  const [example,      setExample] = useState("")
+  const [showExample,  setShowExample] = useState(false)
   const [starting,     setStart]  = useState(false)
   // User-side speech recognition (re-add)
   const [recordingAnswer, setRecordingAnswer] = useState(false)
@@ -108,6 +115,8 @@ export default function Interview() {
   // ── Result state ──
   const [finalResult,  setFinalResult] = useState(null)
   const [allQA,        setAllQA]       = useState([])
+  const [reviewQA,     setReviewQA]    = useState(null)
+  const [reviewLoading,setReviewLoad]  = useState(false)
   const [showReview,   setShowReview]  = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
@@ -154,8 +163,8 @@ export default function Interview() {
       ? "HR"
       : selectedRound === "mixed" ? "HR & Technical" : "Technical"
     let roleLine = "a resume-based"
-    if (selectedType === "role") roleLine = `a ${selectedRole.label}`
-    else if (selectedType === "both") roleLine = `a ${selectedRole.label} + resume-based`
+    if (selectedType === "role") roleLine = `a ${selectedRole?.label || "role"}`
+    else if (selectedType === "both") roleLine = `a ${selectedRole?.label || "role"} + resume-based`
     return [
       `Hi! I'm ${interviewerName}, your AI ${roundWord} Interviewer.`,
       `Today we'll complete ${roleLine} interview consisting of ${numQuestions} questions. Answer each one naturally, and I'll evaluate your communication and technical skills.`,
@@ -190,6 +199,27 @@ export default function Interview() {
       speakText(questions[currentIndex])
     }
   }, [screen, currentIndex, questions, introDone])
+
+  // ── InvalidStateError-safe start: stuck state me stop karke delayed retry ──
+  const safeStartRecognition = () => {
+    const rec = recognitionRef.current
+    if (!rec) return false
+    try {
+      rec.start()
+      return true
+    } catch (err) {
+      if (err && err.name === "InvalidStateError") {
+        // pehle se started/stuck hai — stop karo, phir thodi der baad restart
+        try { rec.stop() } catch(_) {}
+        setTimeout(() => {
+          if (!wantRecordingRef.current || !recognitionRef.current) return
+          try { recognitionRef.current.start() } catch(_) {}
+        }, 300)
+        return true
+      }
+      throw err
+    }
+  }
 
   // Setup SpeechRecognition (created once)
   useEffect(() => {
@@ -232,7 +262,10 @@ export default function Interview() {
       if (err === "no-speech") {
         // if user wants to keep speaking, restart recording automatically
         if (wantRecordingRef.current) {
-          try { setTimeout(() => recognitionRef.current && recognitionRef.current.start(), 250) } catch(_) {}
+          setTimeout(() => {
+            if (!wantRecordingRef.current || !recognitionRef.current) return
+            safeStartRecognition()
+          }, 250)
           return
         }
         toast("No speech detected — speak clearly.")
@@ -249,7 +282,10 @@ export default function Interview() {
         return
       }
       if (wantRecordingRef.current) {
-        try { setTimeout(() => recognitionRef.current && recognitionRef.current.start(), 200) } catch(_) { setRecordingAnswer(false) }
+        setTimeout(() => {
+          if (!wantRecordingRef.current || !recognitionRef.current) return
+          safeStartRecognition()
+        }, 200)
         return
       }
       setRecordingAnswer(false)
@@ -300,6 +336,8 @@ export default function Interview() {
       setQuestions(res.data.questions)
       setIndex(0)
       setAnswer("")
+      setExample("")
+      setShowExample(false)
       setAllQA([])
       setTime(0)
       setQuestionTimeLeft(QUESTION_TIME_LIMIT)
@@ -336,8 +374,12 @@ export default function Interview() {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         await navigator.mediaDevices.getUserMedia({ audio: true })
       }
-      recognitionRef.current.start()
-      toast.success("Recording... speak now")
+      if (safeStartRecognition()) {
+        toast.success("Recording... speak now")
+      } else {
+        wantRecordingRef.current = false
+        toast.error("Speech not supported")
+      }
     } catch (err) {
       wantRecordingRef.current = false
       const name = err && err.name ? err.name : "error"
@@ -361,11 +403,13 @@ export default function Interview() {
       question:       questions[qi],
       answer:         answer,
       role:           selectedRole.label,
-      question_index: qi
+      question_index: qi,
+      example:        example
     })
     setAllQA(prev => [...prev, {
       question:   questions[qi],
       answer:     answer,
+      example:    example.trim() ? example : null,
       evaluation: null
     }])
   }
@@ -393,6 +437,8 @@ export default function Interview() {
       } else {
         setIndex(currentIndex + 1)
         setAnswer("")
+        setExample("")
+        setShowExample(false)
       }
       toast.success("Answer saved! ✅")
     } catch (err) {
@@ -453,6 +499,8 @@ export default function Interview() {
       } else {
         setIndex(idx + 1)
         setAnswer("")
+        setExample("")
+        setShowExample(false)
         toast.success("Time's up — answer saved ✅")
       }
     } catch (err) {
@@ -477,6 +525,17 @@ export default function Interview() {
     handleTimeUp(currentIndex)
   }, [questionTimeLeft, screen, currentIndex, timeElapsed, showConfirmModal, submitting, completing])
 
+  // ── RESULT screen: review ko DB se load karo (source of truth) ──
+  useEffect(() => {
+    if (screen !== SCREEN.RESULT || !sessionId) return
+    setShowReview(true)
+    setReviewLoad(true)
+    API.get(`/api/interview/session/${sessionId}`)
+      .then(res => setReviewQA(res.data?.qa_list || []))
+      .catch(() => setReviewQA(null))
+      .finally(() => setReviewLoad(false))
+  }, [screen, sessionId])
+
   // ═══════════════════════════
   // RESTART
   // ═══════════════════════════
@@ -488,15 +547,20 @@ export default function Interview() {
       setRecordingAnswer(false)
     }
     setScreen(SCREEN.SETUP)
-    setRole(null)
+    setRole(ROLES[0])
     setType("role")
+    setRound("hr")
     setResume(null)
     setNumQ(10)
     setSessionId(null)
     setQuestions([])
     setIndex(0)
     setAnswer("")
+    setExample("")
+    setShowExample(false)
     setAllQA([])
+    setReviewQA(null)
+    setReviewLoad(false)
     setFinalResult(null)
     setShowReview(false)
     setTime(0)
@@ -525,46 +589,121 @@ export default function Interview() {
         </p>
       </motion.div>
 
+      {/* ── Progress Stepper ── */}
+      {(() => {
+        const steps = []
+        steps.push({ id: "type",  label: "Type" })
+        if (selectedType === "role")   steps.push({ id: "role",   label: "Role" })
+        if (selectedType === "resume") steps.push({ id: "resume", label: "Resume" })
+        if (selectedType === "both")   steps.push({ id: "role", label: "Role" }, { id: "resume", label: "Resume" })
+        steps.push({ id: "round",      label: "Round" })
+        steps.push({ id: "questions",  label: "Questions" })
+
+        const isDone = s => s.id === "type"      ? true :
+                           s.id === "role"       ? !!selectedRole :
+                           s.id === "resume"     ? !!resumeFile :
+                           s.id === "round"      ? !!selectedRound :
+                           true
+
+        const current = steps.find(st => !isDone(st)) || { id: "questions" }
+        return (
+          <motion.div
+            style={{
+              display: "flex", alignItems: "center", gap: "8px",
+              flexWrap: "wrap", marginBottom: "20px",
+              padding: "12px 16px", background: "var(--card2)",
+              border: "1px solid var(--bdr)", borderRadius: "10px"
+            }}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            {steps.map((s, i) => (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: ".76rem", fontWeight: 800, flexShrink: 0,
+                  background: isDone(s) && current.id !== s.id ? "var(--p)"
+                             : current.id === s.id ? "var(--acc)"
+                             : "var(--bg3)",
+                  border: current.id === s.id ? "1.5px solid var(--p)" : "1px solid var(--bdr)",
+                  color:   isDone(s) && current.id !== s.id ? "#fff"
+                          : current.id === s.id ? "var(--p)"
+                          : "var(--t3)"
+                }}>
+                  {isDone(s) ? <LuCheck size={13}/> : i + 1}
+                </div>
+                <span style={{
+                  fontSize: ".8rem", whiteSpace: "nowrap",
+                  fontWeight: current.id === s.id ? 700 : 500,
+                  color: current.id === s.id ? "var(--p)" : isDone(s) ? "var(--t1)" : "var(--t3)"
+                }}>
+                  {s.label}
+                </span>
+                {i < steps.length - 1 && <span style={{ color: "var(--bdr2)", fontSize: ".9rem" }}>→</span>}
+              </div>
+            ))}
+          </motion.div>
+        )
+      })()}
+
       {/* ── Step 1: Interview Type ── */}
       <motion.div
         className="glass"
-        style={{ padding: "24px", marginBottom: "20px" }}
+        style={{ padding: "20px", marginBottom: "20px" }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y:  0 }}
         transition={{ delay: .1 }}
       >
-        <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
+        <h3 style={{ fontWeight: 700, marginBottom: "14px", fontSize: "1.05rem" }}>
           Step 1 — Interview Type
         </h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
           {TYPES.map(type => (
             <div
               key={type.id}
               onClick={() => setType(type.id)}
               style={{
-                padding:      "18px",
+                position:    "relative",
+                padding:      "14px",
                 borderRadius: "12px",
                 border:       selectedType === type.id
-                                ? "2px solid #2563eb"
-                                : "1px solid rgba(255,255,255,.08)",
+                                ? "2px solid var(--pl)"
+                                : "1px solid var(--bdr)",
                 background:   selectedType === type.id
-                                ? "rgba(37,99,235,.15)"
-                                : "rgba(255,255,255,.03)",
+                                ? "var(--acc)"
+                                : "var(--card2)",
                 cursor:       "pointer",
                 textAlign:    "center",
                 transition:   "all .2s"
               }}
             >
-              <div style={{ fontSize: "1.9rem", marginBottom: "8px" }}>{type.icon}</div>
+              {selectedType === type.id && (
+                <div style={{
+                  position: "absolute", top: 8, right: 8, width: 20, height: 20,
+                  borderRadius: "50%", background: "var(--p)", color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  <LuCheck size={12}/>
+                </div>
+              )}
               <div style={{
-                fontWeight: 700,
-                fontSize:   "1rem",
-                marginBottom: "5px",
-                color: selectedType === type.id ? "#2563eb" : "var(--t1)"
+                width: 42, height: 42, borderRadius: "11px",
+                margin: "0 auto 8px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: selectedType === type.id ? "var(--bg)" : "var(--bg2)",
+                border: selectedType === type.id ? "1px solid rgba(37,99,235,.25)" : "1px solid var(--bdr)",
+                color: selectedType === type.id ? "var(--p)" : "var(--t3)"
+              }}>
+                {type.icon}
+              </div>
+              <div style={{
+                fontWeight: 700, fontSize: ".95rem", marginBottom: "4px",
+                color: selectedType === type.id ? "var(--p)" : "var(--t1)"
               }}>
                 {type.label}
               </div>
-              <div style={{ fontSize: ".86rem", color: "var(--t2)" }}>
+              <div style={{ fontSize: ".82rem", color: "var(--t2)", lineHeight: 1.4 }}>
                 {type.desc}
               </div>
             </div>
@@ -580,41 +719,59 @@ export default function Interview() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y:  0 }}
         >
-          <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
+          <h3 style={{ fontWeight: 700, marginBottom: "14px", fontSize: "1.05rem" }}>
             Step 2 — Select Job Role
           </h3>
           <div style={{
             display:             "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))",
             gap:                 "10px"
           }}>
             {ROLES.map(role => (
               <motion.div
                 key={role.id}
                 onClick={() => setRole(role)}
-                whileHover={{ y: -3 }}
+                whileHover={selectedRole?.id !== role.id ? { y: -3 } : {}}
                 whileTap={{ scale: .97 }}
                 style={{
-                  padding:      "16px",
+                  position:    "relative",
+                  padding:      "13px",
                   borderRadius: "12px",
                   border:       selectedRole?.id === role.id
-                                  ? "2px solid #2563eb"
-                                  : "1px solid rgba(255,255,255,.08)",
+                                  ? "2px solid var(--pl)"
+                                  : "1px solid var(--bdr)",
                   background:   selectedRole?.id === role.id
-                                  ? "rgba(37,99,235,.15)"
-                                  : "rgba(255,255,255,.03)",
+                                  ? "var(--acc)"
+                                  : "var(--card2)",
                   cursor:       "pointer",
                   textAlign:    "center",
                   transition:   "all .2s"
                 }}
               >
-                <div style={{ fontSize: "2.1rem", marginBottom: "8px" }}>
+                {selectedRole?.id === role.id && (
+                  <div style={{
+                    position: "absolute", top: 7, right: 7, width: 19, height: 19,
+                    borderRadius: "50%", background: "var(--p)", color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center"
+                  }}>
+                    <LuCheck size={11}/>
+                  </div>
+                )}
+                <div style={{
+                  width: 40, height: 40, borderRadius: "10px",
+                  margin: "0 auto 8px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: selectedRole?.id === role.id ? "var(--bg)" : "var(--bg2)",
+                  border: selectedRole?.id === role.id ? "1px solid rgba(37,99,235,.25)" : "1px solid var(--bdr)",
+                  color: selectedRole?.id === role.id ? "var(--p)" : "var(--t3)"
+                }}>
                   {role.icon}
                 </div>
                 <div style={{
-                  fontSize:   ".95rem",
+                  fontSize:   ".9rem",
                   fontWeight: selectedRole?.id === role.id ? 700 : 500,
-                  color:      selectedRole?.id === role.id ? "#2563eb" : "var(--t1)"
+                  color:      selectedRole?.id === role.id ? "var(--p)" : "var(--t1)",
+                  lineHeight: 1.3
                 }}>
                   {role.label}
                 </div>
@@ -632,10 +789,10 @@ export default function Interview() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y:  0 }}
         >
-          <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
+          <h3 style={{ fontWeight: 700, marginBottom: "14px", fontSize: "1.05rem" }}>
             {selectedType === "both" ? "Step 3" : "Step 2"} — Upload Resume
           </h3>
-          <p style={{ color: "var(--t2)", marginBottom: "16px", fontSize: ".86rem" }}>
+          <p style={{ color: "var(--t2)", marginBottom: "14px", fontSize: ".86rem" }}>
             Resume upload is optional. If you don't have one, you can still start the interview and answer role-based questions.
           </p>
           <label style={{
@@ -643,11 +800,11 @@ export default function Interview() {
             flexDirection:"column",
             alignItems:   "center",
             justifyContent:"center",
-            padding:      "30px",
-            border:       `2px dashed ${resumeFile ? "#16a34a" : "rgba(255,255,255,.15)"}`,
+            padding:      "22px",
+            border:       `2px dashed ${resumeFile ? "#16a34a" : "var(--bdr2)"}`,
             borderRadius: "12px",
             cursor:       "pointer",
-            background:   resumeFile ? "rgba(22,163,74,.05)" : "rgba(255,255,255,.02)",
+            background:   resumeFile ? "rgba(22,163,74,.05)" : "var(--card2)",
             transition:   "all .3s"
           }}>
             <input
@@ -663,7 +820,7 @@ export default function Interview() {
             />
             {resumeFile ? (
               <>
-                <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>✅</div>
+                <div style={{ marginBottom: "8px", color: "#16a34a" }}><LuBadgeCheck size={40}/></div>
                 <div style={{ fontWeight: 600, color: "#16a34a" }}>{resumeFile.name}</div>
                 <div style={{ fontSize: ".8rem", color: "var(--t2)", marginTop: "4px" }}>
                   Click to change file
@@ -671,7 +828,7 @@ export default function Interview() {
               </>
             ) : (
               <>
-                <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>📄</div>
+                <div style={{ marginBottom: "8px", color: "var(--t3)" }}><LuFileText size={40}/></div>
                 <div style={{ fontWeight: 600 }}>Click to upload resume</div>
                 <div style={{ fontSize: ".8rem", color: "var(--t2)", marginTop: "4px" }}>
                   PDF, DOCX, or TXT — Max 5MB
@@ -690,38 +847,55 @@ export default function Interview() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y:  0 }}
         >
-          <h3 style={{ fontWeight: 700, marginBottom: "12px" }}>
+          <h3 style={{ fontWeight: 700, marginBottom: "12px", fontSize: "1.05rem" }}>
             {selectedType === "both" ? "Step 4" : "Step 3"} — Choose Round
           </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
             {ROUNDS.map(round => (
               <div
                 key={round.id}
                 onClick={() => setRound(round.id)}
                 style={{
-                  padding:      "16px",
+                  position:    "relative",
+                  padding:      "14px",
                   borderRadius: "12px",
                   border:       selectedRound === round.id
-                                  ? "2px solid #2563eb"
-                                  : "1px solid rgba(255,255,255,.08)",
+                                  ? "2px solid var(--pl)"
+                                  : "1px solid var(--bdr)",
                   background:   selectedRound === round.id
-                                  ? "rgba(37,99,235,.15)"
-                                  : "rgba(255,255,255,.03)",
+                                  ? "var(--acc)"
+                                  : "var(--card2)",
                   cursor:       "pointer",
                   textAlign:    "center",
                   transition:   "all .2s"
                 }}
               >
-                <div style={{ fontSize: "1.8rem", marginBottom: "8px" }}>{round.icon}</div>
+                {selectedRound === round.id && (
+                  <div style={{
+                    position: "absolute", top: 8, right: 8, width: 20, height: 20,
+                    borderRadius: "50%", background: "var(--p)", color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center"
+                  }}>
+                    <LuCheck size={12}/>
+                  </div>
+                )}
                 <div style={{
-                  fontWeight: 700,
-                  fontSize:   "1rem",
-                  marginBottom: "5px",
-                  color: selectedRound === round.id ? "#2563eb" : "var(--t1)"
+                  width: 42, height: 42, borderRadius: "11px",
+                  margin: "0 auto 8px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: selectedRound === round.id ? "var(--bg)" : "var(--bg2)",
+                  border: selectedRound === round.id ? "1px solid rgba(37,99,235,.25)" : "1px solid var(--bdr)",
+                  color: selectedRound === round.id ? "var(--p)" : "var(--t3)"
+                }}>
+                  {round.icon}
+                </div>
+                <div style={{
+                  fontWeight: 700, fontSize: ".95rem", marginBottom: "4px",
+                  color: selectedRound === round.id ? "var(--p)" : "var(--t1)"
                 }}>
                   {round.label}
                 </div>
-                <div style={{ fontSize: ".86rem", color: "var(--t2)" }}>
+                <div style={{ fontSize: ".82rem", color: "var(--t2)", lineHeight: 1.4 }}>
                   {round.desc}
                 </div>
               </div>
@@ -733,11 +907,11 @@ export default function Interview() {
       {/* ── Number of Questions ── */}
       <motion.div
         className="glass"
-        style={{ padding: "24px", marginBottom: "24px" }}
+        style={{ padding: "20px", marginBottom: "24px" }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y:  0 }}
       >
-        <h3 style={{ fontWeight: 700, marginBottom: "16px" }}>
+        <h3 style={{ fontWeight: 700, marginBottom: "14px", fontSize: "1.05rem" }}>
           {selectedType === "both" ? "Step 5" : "Step 4"} — Number of Questions: <span className="gt">{numQuestions}</span>
         </h3>
         <div style={{
@@ -755,15 +929,16 @@ export default function Interview() {
               onClick={() => { if (selectedRound !== "mixed") setNumQ(opt.n) }}
               disabled={selectedRound === "mixed"}
               style={{
+                position:       "relative",
                 flex:            1,
                 minWidth:        "110px",
                 padding:         "12px 16px",
                 borderRadius:    "10px",
-                border:          `1px solid ${numQuestions === opt.n ? "var(--pl)" : "var(--bdr)"}`,
+                border:          `${numQuestions === opt.n ? "2px" : "1px"} solid ${numQuestions === opt.n ? "var(--p)" : "var(--bdr)"}`,
                 background:      numQuestions === opt.n
-                                  ? "rgba(37,99,235,.15)"
+                                  ? "var(--acc)"
                                   : "var(--card2)",
-                color:           numQuestions === opt.n ? "var(--pl)" : "var(--t2)",
+                color:           numQuestions === opt.n ? "var(--p)" : "var(--t2)",
                 fontWeight:      600,
                 fontSize:        ".88rem",
                 cursor:          selectedRound === "mixed" ? "not-allowed" : "pointer",
@@ -771,6 +946,15 @@ export default function Interview() {
                 transition:      "all .25s"
               }}
             >
+              {numQuestions === opt.n && (
+                <span style={{
+                  position: "absolute", top: -7, right: -7, width: 19, height: 19,
+                  borderRadius: "50%", background: "var(--p)", color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  <LuCheck size={11}/>
+                </span>
+              )}
               {opt.label}
             </button>
           ))}
@@ -779,10 +963,11 @@ export default function Interview() {
           <div style={{
             marginTop: "12px",
             fontSize:  ".82rem",
-            color:     "#2563eb",
-            fontWeight: 600
+            color:     "var(--pl)",
+            fontWeight: 600,
+            display:   "flex", alignItems: "center", gap: "6px"
           }}>
-            🔥 Mixed Round is always fixed — 15 questions (6 HR + 9 Technical)
+            <LuLayers size={14}/> Mixed Round is always fixed — 15 questions (6 HR + 9 Technical)
           </div>
         ) : (
           <div style={{
@@ -795,29 +980,69 @@ export default function Interview() {
         )}
       </motion.div>
 
-      {/* ── Start Button ── */}
-      <motion.button
-        className="btn btnp"
-        onClick={startInterview}
-        disabled={starting || !selectedRole}
-        style={{
-          width:     "100%",
-          padding:   "16px",
-          fontSize:  "1.05rem",
-          fontWeight: 700
-        }}
-        whileHover={!starting ? { scale: 1.01 } : {}}
-        whileTap={{ scale: .98 }}
-      >
-        {starting ? (
-          <span style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"12px" }}>
-            <div className="spinner" style={{ width:20, height:20, borderWidth:2 }}/>
-            Generating questions with AI... (max ~30s)
-          </span>
-        ) : (
-          "🚀 Start Interview"
-        )}
-      </motion.button>
+      {/* ── Sticky Summary + Start Bar ── */}
+      {(() => {
+        const typeLabel  = (TYPES.find(t => t.id === selectedType) || {}).label || ""
+        const roleLabel  = selectedType === "resume" ? null
+                         : selectedRole ? selectedRole.label : null
+        const resLabel   = selectedType === "role" ? null
+                         : (resumeFile ? "Resume ✓" : "No Resume")
+        const roundLabel = (ROUNDS.find(r => r.id === selectedRound) || {}).label || ""
+        const qCount     = selectedRound === "mixed" ? 15 : numQuestions
+        const timeMin    = Math.round((qCount * QUESTION_TIME_LIMIT) / 60)
+        const parts      = [roleLabel, resLabel, roundLabel, `${qCount} Questions`].filter(Boolean)
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y:  0 }}
+            style={{
+              position:       "sticky",
+              bottom:         16,
+              zIndex:         50,
+              marginTop:      "24px",
+              background:     "var(--card)",
+              border:         "1px solid var(--bdr)",
+              borderRadius:   "14px",
+              boxShadow:      "var(--shadow-lg)",
+              padding:        "14px 16px",
+              display:        "flex",
+              flexWrap:       "wrap",
+              alignItems:     "center",
+              justifyContent: "space-between",
+              gap:            "12px"
+            }}
+          >
+            <div style={{ minWidth: "220px", flex: 1 }}>
+              <div style={{ fontSize: ".9rem", fontWeight: 700, color: "var(--t1)" }}>
+                <span style={{ color: "var(--p)" }}>{typeLabel}</span>
+                {parts.length > 0 && <> · {parts.join(" · ")}</>}
+              </div>
+              <div style={{ fontSize: ".78rem", color: "var(--t2)", marginTop: "3px" }}>
+                Estimated time: <b style={{ color: "var(--p)" }}>~{timeMin} min</b>
+              </div>
+            </div>
+            <motion.button
+              className="btn btnp"
+              onClick={startInterview}
+              disabled={starting || !selectedRole}
+              whileHover={!starting ? { scale: 1.02 } : {}}
+              whileTap={{ scale: .98 }}
+              style={{ padding: "13px 26px", fontSize: ".98rem", fontWeight: 700, whiteSpace: "nowrap" }}
+            >
+              {starting ? (
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+                  <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }}/>
+                  Generating questions with AI... (max ~30s)
+                </span>
+              ) : (
+                <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <LuRocket size={18}/> Start Interview
+                </span>
+              )}
+            </motion.button>
+          </motion.div>
+        )
+      })()}
     </div>
   )
 
@@ -847,7 +1072,7 @@ export default function Interview() {
             borderRadius: "20px",
             padding:      "5px 14px",
             fontSize:     ".82rem",
-            color:        "#2563eb",
+            color:        "var(--pl)",
             fontWeight:   600
           }}>
             💼 {selectedRole?.label}
@@ -996,7 +1221,7 @@ export default function Interview() {
 
         <p style={{ color: "var(--t2)", fontSize: ".75rem", marginTop: "4px" }}>
           {speaking ? (
-            <span style={{ color: "#2563eb", fontWeight: 600 }}>AI Interviewer is speaking...</span>
+            <span style={{ color: "var(--pl)", fontWeight: 600 }}>AI Interviewer is speaking...</span>
           ) : "AI Interviewer"}
         </p>
       </div>
@@ -1042,7 +1267,7 @@ export default function Interview() {
               style={{
                 background: "rgba(37,99,235,.12)",
                 border: "1px solid rgba(37,99,235,.3)",
-                color: "#2563eb",
+                color: "var(--pl)",
                 padding: "6px 12px",
                 borderRadius: "10px",
                 cursor: "pointer",
@@ -1163,6 +1388,43 @@ export default function Interview() {
                   🔄 Record again (galat suna toh)
                 </button>
               )}
+
+              {/* ── Optional Example / Code ── */}
+              <div style={{ marginBottom: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowExample(!showExample)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "8px",
+                    width: "100%",
+                    background: showExample ? "rgba(37,99,235,.12)" : "var(--card2)",
+                    border: `1px solid ${showExample ? "rgba(37,99,235,.35)" : "var(--bdr)"}`,
+                    color: showExample ? "var(--pl)" : "var(--t2)",
+                    padding: "9px 14px", borderRadius: "10px",
+                    cursor: "pointer", fontSize: ".84rem", fontWeight: 600,
+                    transition: "all .2s"
+                  }}
+                >
+                  {showExample ? <LuCheck size={16}/> : <LuPlus size={16}/>}
+                  {showExample ? "Example / Code Added" : "Add Example / Code (Optional)"}
+                </button>
+
+                {showExample && (
+                  <textarea
+                    value={example}
+                    onChange={e => setExample(e.target.value)}
+                    placeholder="Paste code, pseudo-code, or a real-world example to support your answer..."
+                    style={{
+                      width: "100%", minHeight: "90px", marginTop: "8px",
+                      background: "var(--bg)", color: "var(--t1)",
+                      border: "1px solid var(--bdr2)", borderRadius: "10px",
+                      padding: "10px 12px", fontSize: ".85rem", lineHeight: 1.5,
+                      fontFamily: "'JetBrains Mono','Fira Code',monospace",
+                      resize: "vertical", outline: "none", boxSizing: "border-box"
+                    }}
+                  />
+                )}
+              </div>
             </>
           ) : (
             <div style={{
@@ -1516,47 +1778,103 @@ export default function Interview() {
           </p>
         </motion.div>
 
-        {/* Score Circle + Stats */}
+        {/* Score Panel + Stats */}
         <motion.div
           className="glass"
-          style={{ padding: "32px", textAlign: "center", marginBottom: "20px" }}
+          style={{ padding: "28px", marginBottom: "20px" }}
           initial={{ opacity: 0, scale: .95 }}
           animate={{ opacity: 1, scale: 1 }}
         >
-          {/* Score Circle */}
-          <div style={{
-            width:           "140px",
-            height:          "140px",
-            borderRadius:    "50%",
-            border:          `4px solid ${gradeColor}`,
-            display:         "flex",
-            alignItems:      "center",
-            justifyContent:  "center",
-            flexDirection:   "column",
-            margin:          "0 auto 20px",
-            boxShadow:       `0 0 40px ${gradeColor}40`
-          }}>
-            <div style={{ fontSize: "2.2rem", fontWeight: 900, color: gradeColor }}>
-              {Math.round(r.percentage || 0)}%
+          <div style={{ display: "flex", alignItems: "center", gap: "26px", flexWrap: "wrap" }}>
+            {/* Overall Score */}
+            <div style={{ textAlign: "center", minWidth: "190px", flex: "0 0 auto" }}>
+              <div style={{
+                fontSize: ".68rem", fontWeight: 700, color: "var(--t2)",
+                letterSpacing: ".14em", textTransform: "uppercase", marginBottom: "6px"
+              }}>
+                Overall Score
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "6px", justifyContent: "center" }}>
+                <span style={{ fontSize: "3rem", fontWeight: 900, color: gradeColor, lineHeight: 1 }}>
+                  {Math.round(r.percentage || 0)}
+                </span>
+                <span style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--t2)" }}>
+                  / 100
+                </span>
+              </div>
+              <div style={{ marginTop: "12px" }}>
+                <span style={{
+                  display:       "inline-block",
+                  background:    `${gradeColor}22`,
+                  border:        `1px solid ${gradeColor}`,
+                  color:         gradeColor,
+                  borderRadius:  "30px",
+                  padding:       "5px 18px",
+                  fontSize:      "1rem",
+                  fontWeight:    800
+                }}>
+                  Grade: {r.grade}
+                </span>
+              </div>
             </div>
-            <div style={{ fontSize: ".68rem", fontWeight: 700, color: "var(--t2)", letterSpacing: ".14em", textTransform: "uppercase" }}>
-              Grade
-            </div>
-            <div style={{ fontSize: "1rem", fontWeight: 700, color: gradeColor }}>
-              {r.grade}
+
+            {/* Progress bar */}
+            <div style={{ flex: 1, minWidth: "260px" }}>
+              <div style={{
+                display:        "flex",
+                justifyContent: "space-between",
+                marginBottom:   "8px",
+                fontSize:       ".82rem",
+                color:          "var(--t2)"
+              }}>
+                <span style={{ fontWeight: 700 }}>
+                  {r.percentage >= 85 ? "🏆 Excellent Performance"
+                 : r.percentage >= 70 ? "✅ Very Good"
+                 : r.percentage >= 55 ? "👍 Good Effort"
+                 : r.percentage >= 40 ? "⚡ Keep Practicing"
+                 : "📚 Needs More Preparation"}
+                </span>
+                <span style={{ fontWeight: 800, color: gradeColor }}>
+                  {Math.round(r.percentage || 0)}%
+                </span>
+              </div>
+              <div style={{
+                position:     "relative",
+                height:       "18px",
+                background:   "var(--bg3)",
+                borderRadius: "10px",
+                overflow:     "hidden"
+              }}>
+                <motion.div
+                  style={{
+                    height:     "100%",
+                    background: `linear-gradient(90deg, ${gradeColor}, ${gradeColor}cc)`,
+                    borderRadius: "10px"
+                  }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${r.percentage || 0}%` }}
+                  transition={{ duration: .8, ease: "easeOut" }}
+                />
+                {[40, 55, 70, 85].map(t => (
+                  <div key={t} style={{
+                    position: "absolute", top: 0, bottom: 0, width: "1px",
+                    background: "rgba(255,255,255,.55)", left: `${t}%`
+                  }}/>
+                ))}
+              </div>
+              <div style={{
+                display:        "flex",
+                justifyContent: "space-between",
+                marginTop:      "5px",
+                fontSize:       ".68rem",
+                color:          "var(--t3)"
+              }}>
+                <span>C</span><span>B</span><span>A</span><span>A+</span><span>100</span>
+              </div>
             </div>
           </div>
 
-          {/* Verdict */}
-          <div style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: "8px" }}>
-            {r.percentage >= 85 ? "🏆 Excellent Performance!"
-           : r.percentage >= 70 ? "✅ Very Good!"
-           : r.percentage >= 55 ? "👍 Good Effort!"
-           : r.percentage >= 40 ? "⚡ Keep Practicing!"
-           : "📚 Needs More Preparation"}
-          </div>
-
-          <div style={{ color: "var(--t2)", marginBottom: "24px", fontSize: ".9rem" }}>
+          <div style={{ color: "var(--t2)", marginTop: "18px", fontSize: ".9rem" }}>
             {report.motivational_message}
           </div>
 
@@ -1564,7 +1882,8 @@ export default function Interview() {
           <div style={{
             display:             "grid",
             gridTemplateColumns: "repeat(3, 1fr)",
-            gap:                 "16px"
+            gap:                 "16px",
+            marginTop:           "20px"
           }}>
             {[
               { label:"Total Score",      value:`${r.total_score || 0}/${r.max_score || 0}` },
@@ -1583,17 +1902,53 @@ export default function Interview() {
               </div>
             ))}
           </div>
-
-          {/* Grade legend */}
-          <div style={{
-            marginTop: "18px", paddingTop: "14px",
-            borderTop: "1px solid var(--bdr)",
-            fontSize: ".75rem", color: "var(--t3)"
-          }}>
-            <span style={{ fontWeight: 700, marginRight: "8px" }}>Grade Scale:</span>
-            A+ ≥85 · A ≥70 · B ≥55 · C ≥40 · D &lt;40
-          </div>
         </motion.div>
+
+        {/* Performance Breakdown */}
+        {(report.skills_breakdown || []).length > 0 && (
+          <motion.div
+            className="glass"
+            style={{ padding: "20px", marginBottom: "20px" }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y:  0 }}
+            transition={{ delay: .15 }}
+          >
+            <h3 style={{ fontWeight: 700, marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+              🧩 Performance Breakdown
+            </h3>
+            <div style={{
+              display:             "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+              gap:                 "12px"
+            }}>
+              {(report.skills_breakdown || []).map((sk, i) => {
+                const p = Math.round(sk.percentage || 0)
+                const c = p >= 70 ? "#16a34a" : p >= 40 ? "#f59e0b" : "#ef4444"
+                return (
+                  <div key={i} style={{
+                    padding:      "12px 14px",
+                    borderRadius: "10px",
+                    background:   "var(--bg3)",
+                    border:       "1px solid var(--bdr)"
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                      <span style={{ fontSize: ".86rem", fontWeight: 600, color: "var(--t1)" }}>{sk.skill}</span>
+                      <span style={{ fontSize: ".86rem", fontWeight: 800, color: c }}>{p}%</span>
+                    </div>
+                    <div style={{ height: "8px", background: "rgba(255,255,255,.05)", borderRadius: "6px", overflow: "hidden" }}>
+                      <motion.div
+                        style={{ height: "100%", background: c, borderRadius: "6px" }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${p}%` }}
+                        transition={{ duration: .7, delay: .2 + i * .1 }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Report Cards */}
         <div style={{
@@ -1725,59 +2080,102 @@ export default function Interview() {
 
           {showReview && (
             <div style={{ marginTop: "16px" }}>
-              {allQA.map((qa, i) => (
-                <div key={i} style={{
-                  padding:      "16px",
-                  borderRadius: "10px",
-                  background:   "rgba(255,255,255,.03)",
-                  border:       "1px solid var(--bdr)",
-                  marginBottom: "10px"
-                }}>
-                  <div style={{ fontWeight: 600, color: "#2563eb", marginBottom: "8px", fontSize: ".88rem" }}>
-                    Q{i + 1}: {qa.question}
-                  </div>
-                  <div style={{
-                    padding:      "8px",
-                    borderRadius: "6px",
+              {reviewLoading && (
+                <div style={{ padding: "20px", textAlign: "center", color: "var(--t2)", fontSize: ".9rem" }}>
+                  <div className="spinner" style={{ width: 24, height: 24, margin: "0 auto 10px" }}/>
+                  Loading your answers...
+                </div>
+              )}
+
+              {!reviewLoading && !(reviewQA || allQA).length && (
+                <div style={{ padding: "20px", textAlign: "center", color: "var(--t2)", fontSize: ".9rem" }}>
+                  No answers were recorded for this session.
+                </div>
+              )}
+
+              {!reviewLoading && (reviewQA || allQA).map((qa, i) => {
+                const ev      = qa.evaluation || qa
+                const score   = Number(ev.score ?? 0)
+                const hasSug  = !!(ev.good_points || ev.improve || ev.hint)
+                const scoreColor = score >= 7 ? "#16a34a" : score >= 5 ? "#f59e0b" : "#ef4444"
+                const scoreBg    = score >= 7 ? "rgba(22,163,74,.15)" : score >= 5 ? "rgba(245,158,11,.15)" : "rgba(239,68,68,.15)"
+                return (
+                  <div key={i} style={{
+                    padding:      "16px",
+                    borderRadius: "10px",
                     background:   "rgba(255,255,255,.03)",
-                    color:        "var(--t2)",
-                    fontSize:     ".84rem",
-                    marginBottom: "8px",
-                    lineHeight:   1.5
+                    border:       "1px solid var(--bdr)",
+                    marginBottom: "10px"
                   }}>
-                    {qa.answer}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    {qa.evaluation && (
-                      <>
-                        <span style={{
-                          background:   qa.evaluation.score >= 7
-? "rgba(22,163,74,.15)"
-                                          : qa.evaluation.score >= 5
-                                          ? "rgba(245,158,11,.15)"
-                                          : "rgba(239,68,68,.15)",
-                          color:        qa.evaluation.score >= 7 ? "#16a34a"
-                                      : qa.evaluation.score >= 5 ? "#f59e0b"
-                                      : "#ef4444",
-                          border:       `1px solid ${
-                                        qa.evaluation.score >= 7 ? "#16a34a"
-                                      : qa.evaluation.score >= 5 ? "#f59e0b"
-                                      : "#ef4444"}`,
-                          borderRadius: "6px",
-                          padding:      "3px 10px",
-                          fontSize:     ".78rem",
-                          fontWeight:   700
-                        }}>
-                          {qa.evaluation.score}/10
-                        </span>
-                        <span style={{ fontSize: ".8rem", color: "var(--t2)" }}>
-                          {qa.evaluation.feedback}
-                        </span>
-                      </>
+                    <div style={{ fontWeight: 600, color: "var(--pl)", marginBottom: "8px", fontSize: ".88rem" }}>
+                      Q{i + 1}: {qa.question}
+                    </div>
+                    <div style={{
+                      padding:      "8px",
+                      borderRadius: "6px",
+                      background:   "rgba(255,255,255,.03)",
+                      color:        "var(--t2)",
+                      fontSize:     ".84rem",
+                      marginBottom: "8px",
+                      lineHeight:   1.5
+                    }}>
+                      {qa.answer || "No answer provided"}
+                    </div>
+                    {qa.example && (
+                      <div style={{
+                        padding: "8px", borderRadius: "6px",
+                        background: "rgba(16,185,129,.05)",
+                        border: "1px solid rgba(16,185,129,.2)",
+                        color: "var(--t2)", fontSize: ".82rem",
+                        marginBottom: "8px", lineHeight: 1.5,
+                        fontFamily: "'JetBrains Mono','Fira Code',monospace",
+                        whiteSpace: "pre-wrap", wordBreak: "break-word"
+                      }}>
+                        <span style={{ fontWeight: 700, color: "#10b981" }}>Example/Code:</span> {qa.example}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: hasSug ? 10 : 0 }}>
+                      <span style={{
+                        background:   scoreBg,
+                        color:        scoreColor,
+                        border:       `1px solid ${scoreColor}`,
+                        borderRadius: "6px",
+                        padding:      "3px 10px",
+                        fontSize:     ".78rem",
+                        fontWeight:   700,
+                        flexShrink:   0
+                      }}>
+                        {score}/10
+                      </span>
+                      {ev.feedback && (
+                        <span style={{ fontSize: ".8rem", color: "var(--t2)" }}>{ev.feedback}</span>
+                      )}
+                    </div>
+                    {hasSug && (
+                      <div style={{ marginTop: "6px", fontSize: ".82rem", lineHeight: 1.6 }}>
+                        {ev.good_points && ev.good_points !== "—" && (
+                          <div style={{ marginBottom: "6px" }}>
+                            <span style={{ fontWeight: 700, color: "#16a34a" }}>+ </span>
+                            <span style={{ color: "var(--t2)" }}>{ev.good_points}</span>
+                          </div>
+                        )}
+                        {ev.improve && (
+                          <div style={{ marginBottom: "6px" }}>
+                            <span style={{ fontWeight: 700, color: "#f59e0b" }}>↗ </span>
+                            <span style={{ color: "var(--t2)" }}>{ev.improve}</span>
+                          </div>
+                        )}
+                        {ev.hint && ev.hint !== ev.improve && (
+                          <div>
+                            <span style={{ fontWeight: 700, color: "var(--pl)" }}>💡 </span>
+                            <span style={{ color: "var(--t2)" }}>{ev.hint}</span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </motion.div>

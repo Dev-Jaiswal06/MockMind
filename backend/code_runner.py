@@ -24,6 +24,16 @@ STATUS_COMPILE_ERR   = 6
 STATUS_RUNTIME_ERR   = 11
 
 
+def _num(v):
+    try:
+        if v is None or v == "":
+            return 0.0
+        f = float(v)
+        return f if f == f else 0.0
+    except Exception:
+        return 0.0
+
+
 def run_with_piston(code, language, stdin=""):
     lang = LANGS.get(language.lower(), LANGS["python"])
 
@@ -78,11 +88,15 @@ def run_with_piston(code, language, stdin=""):
         stderr         = _decode_b64(data.get("stderr"))
         compile_output = _decode_b64(data.get("compile_output"))
 
+        run_time      = _num(data.get("time"))
+        run_memory_kb = int(_num(data.get("memory")))
+
         logger.info(f"--- PARSED RESULT ---")
         logger.info(f"status.id={status_id}, status.description={status_desc}")
         logger.info(f"compile_output={repr(compile_output[:300])}")
         logger.info(f"stderr={repr(stderr[:300])}")
         logger.info(f"stdout={repr(stdout[:300])}")
+        logger.info(f"runtime={run_time}s, memory={run_memory_kb}KB")
 
         # ── Map Judge0 status to our internal status ──
         if status_id == STATUS_COMPILE_ERR:
@@ -97,6 +111,8 @@ def run_with_piston(code, language, stdin=""):
                 "compile_stderr": compile_output,
                 "run_stderr":     stderr,
                 "compile_code":   status_id,
+                "run_time":       run_time,
+                "run_memory_kb":  run_memory_kb,
             }
 
         elif status_id == STATUS_RUNTIME_ERR:
@@ -111,6 +127,8 @@ def run_with_piston(code, language, stdin=""):
                 "compile_stderr": compile_output,
                 "run_stderr":     stderr,
                 "compile_code":   0,
+                "run_time":       run_time,
+                "run_memory_kb":  run_memory_kb,
             }
 
         elif status_id == STATUS_TLE:
@@ -123,6 +141,8 @@ def run_with_piston(code, language, stdin=""):
                 "compile_stderr": "",
                 "run_stderr":     "",
                 "compile_code":   0,
+                "run_time":       run_time,
+                "run_memory_kb":  run_memory_kb,
             }
 
         elif status_id == STATUS_ACCEPTED:
@@ -135,6 +155,8 @@ def run_with_piston(code, language, stdin=""):
                 "compile_stderr": "",
                 "run_stderr":     stderr,
                 "compile_code":   0,
+                "run_time":       run_time,
+                "run_memory_kb":  run_memory_kb,
             }
 
         else:
@@ -149,6 +171,8 @@ def run_with_piston(code, language, stdin=""):
                 "compile_stderr": compile_output,
                 "run_stderr":     stderr,
                 "compile_code":   0,
+                "run_time":       run_time,
+                "run_memory_kb":  run_memory_kb,
             }
 
     except requests.Timeout:

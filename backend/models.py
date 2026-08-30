@@ -1,6 +1,7 @@
 # backend/models.py
-from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo import MongoClient, ASCENDING, DESCENDING, ReturnDocument
 from pymongo.errors import ConfigurationError, ServerSelectionTimeoutError
+from bson import ObjectId
 from dotenv import load_dotenv
 from datetime import datetime
 import os
@@ -55,6 +56,7 @@ coding_col     = db["coding_sessions"]
 stats_col      = db["user_stats"]
 password_resets_col = db["password_resets"]
 email_verifications_col = db["email_verifications"]
+counters_col = db["counters"]
 
 # ── Fallback Question Bank Collections ──
 question_bank_col   = db["question_bank"]
@@ -64,9 +66,29 @@ user_questions_col  = db["user_questions"]
 user_weak_topics_col = db["user_weak_topics"]
 
 
+def next_user_seq():
+    """Atomic counter se next user number — race-proof sequential IDs ke liye."""
+    doc = counters_col.find_one_and_update(
+        {"_id": "user_uid"},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    return doc["seq"]
+
+
+def get_user_by_identity(identity):
+    """JWT identity se user dhundo — pehle naya uid (MM-XXXX), fallback purana ObjectId hex."""
+    user = users_col.find_one({"uid": identity})
+    if not user and ObjectId.is_valid(identity):
+        user = users_col.find_one({"_id": ObjectId(identity)})
+    return user
+
+
 def init_db():
     """Indexes banao — fast queries ke liye"""
     users_col.create_index([("email", ASCENDING)], unique=True)
+    users_col.create_index([("uid", ASCENDING)], unique=True)
     sessions_col.create_index([("user_id", ASCENDING)])
     sessions_col.create_index([("created_at", DESCENDING)])
     qa_col.create_index([("session_id", ASCENDING)])

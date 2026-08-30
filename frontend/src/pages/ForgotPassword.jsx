@@ -5,6 +5,13 @@ import API                from "../utils/api"
 import toast              from "react-hot-toast"
 import RobotAnimation     from "../components/RobotAnimation"
 
+const maskEmail = (email) => {
+  if (!email) return ""
+  const idx = email.indexOf("@")
+  if (idx <= 0) return email
+  return email.slice(0, Math.min(idx, 7)) + "******" + email.slice(idx)
+}
+
 export default function ForgotPassword() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
@@ -88,7 +95,9 @@ export default function ForgotPassword() {
             </h3>
             <p style={{ color: "var(--t2)", fontSize: ".88rem", lineHeight: 1.6 }}>
               We sent a password reset link to<br/>
-              <strong>{email}</strong>
+              <span style={{ fontSize: ".82rem", fontWeight: 600, color: "var(--t2)", opacity: .85 }}>
+                {maskEmail(email)}
+              </span>
             </p>
             <p style={{ color: "var(--t3)", fontSize: ".8rem", marginTop: "12px" }}>
               Didn't receive it? Check spam folder or try again.
