@@ -3,12 +3,15 @@ import { useState, useEffect }     from "react"
 import { Link, useLocation }     from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { useAuth }               from "../context/AuthContext"
+import {
+  LuBot, LuChartColumn, LuCode, LuLayoutDashboard, LuLogOut, LuMoon, LuSun
+} from "react-icons/lu"
 
 const NAV_ITEMS = [
-  { path: "/dashboard", icon: "🏠", label: "Dashboard"   },
-  { path: "/interview", icon: "🤖", label: "Interview"   },
-  { path: "/coding",    icon: "💻", label: "Coding"      },
-  { path: "/reports",   icon: "📊", label: "Reports"     },
+  { path: "/dashboard", icon: <LuLayoutDashboard size={18}/>, label: "Dashboard" },
+  { path: "/interview", icon: <LuBot size={18}/>,             label: "Interview" },
+  { path: "/coding",    icon: <LuCode size={18}/>,            label: "Coding"    },
+  { path: "/reports",   icon: <LuChartColumn size={18}/>,     label: "Reports"   },
 ]
 
 export default function Sidebar() {
@@ -28,7 +31,7 @@ export default function Sidebar() {
 
   return (
     <motion.div
-      animate={{ width: collapsed ? 70 : 330 }}
+      animate={{ width: collapsed ? 70 : 270 }}
       transition={{ duration: .3, ease: "easeInOut" }}
       style={{
         height:        "100vh",
@@ -106,21 +109,25 @@ export default function Sidebar() {
                 style={{
                   display:      "flex",
                   alignItems:   "center",
-                  gap:          "14px",
-                  padding:      collapsed ? "12px" : "14px 18px",
+                  gap:          "12px",
+                  padding:      collapsed ? "12px" : "12px 14px",
                   borderRadius: "10px",
                   background:   isActive
-                                  ? "rgba(37,99,235,.2)"
+                                  ? "var(--acc)"
                                   : "transparent",
                   border:       isActive
-                                  ? "1px solid rgba(37,99,235,.4)"
+                                  ? "1px solid rgba(37,99,235,.25)"
                                   : "1px solid transparent",
                   cursor:       "pointer",
                   transition:   "all .2s",
                   justifyContent: collapsed ? "center" : "flex-start"
                 }}
               >
-                <span style={{ fontSize: "1.6rem", flexShrink: 0 }}>
+                <span style={{
+                  display:      "inline-flex",
+                  flexShrink:   0,
+                  color:        isActive ? "var(--pl)" : "var(--t3)"
+                }}>
                   {item.icon}
                 </span>
 
@@ -131,9 +138,9 @@ export default function Sidebar() {
                       animate={{ opacity: 1, width: "auto" }}
                       exit={{ opacity: 0, width: 0 }}
                       style={{
-                        color:      isActive ? "var(--pl)" : "var(--t2)",
+                        color:      isActive ? "var(--p)" : "var(--t2)",
                         fontWeight: isActive ? 700 : 500,
-                        fontSize:   "1.2rem",
+                        fontSize:   "1rem",
                         whiteSpace: "nowrap",
                         overflow:   "hidden"
                       }}
@@ -151,7 +158,7 @@ export default function Sidebar() {
                       width:        "6px",
                       height:       "6px",
                       borderRadius: "50%",
-                      background:   "#2563eb",
+                      background:   "var(--p)",
                       marginLeft:   "auto",
                       flexShrink:   0,
                       display:      collapsed ? "none" : "block"
@@ -185,7 +192,7 @@ export default function Sidebar() {
             transition:   "all .2s"
           }}
         >
-          <span style={{ fontSize: "1.1rem" }}>{dark ? "☀️" : "🌙"}</span>
+          <span style={{ display: "inline-flex" }}>{dark ? <LuSun size={16}/> : <LuMoon size={16}/>}</span>
           <AnimatePresence>
             {!collapsed && (
               <motion.span
@@ -272,24 +279,21 @@ export default function Sidebar() {
         {/* Logout */}
         <button
           onClick={() => setShowLogout(true)}
+          className="logout-btn"
           style={{
             width:        "100%",
             padding:      collapsed ? "10px" : "9px 14px",
             borderRadius: "10px",
-            border:       "1px solid var(--err)",
-            background:   "var(--card)",
-            color:        "#ef4444",
             cursor:       "pointer",
             fontSize:     ".82rem",
             fontWeight:   600,
             display:      "flex",
             alignItems:   "center",
             justifyContent: "center",
-            gap:          "8px",
-            transition:   "all .2s"
+            gap:          "8px"
           }}
         >
-          <span>🚪</span>
+          <span style={{ display: "inline-flex" }}><LuLogOut size={16}/></span>
           <AnimatePresence>
             {!collapsed && (
               <motion.span
@@ -328,7 +332,7 @@ export default function Sidebar() {
               onClick={e => e.stopPropagation()}
               style={{ padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}
             >
-              <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>🚪</div>
+              <div style={{ display: "inline-flex", color: "var(--err)", marginBottom: "12px" }}><LuLogOut size={38}/></div>
               <h3 style={{ fontSize: "1.15rem", fontWeight: 700, marginBottom: "8px" }}>
                 Sign Out?
               </h3>

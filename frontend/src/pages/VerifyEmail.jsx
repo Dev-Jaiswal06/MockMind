@@ -1,19 +1,37 @@
-import { useState }            from "react"
+import { useEffect, useState } from "react"
 import { Link, useSearchParams, useNavigate } from "react-router-dom"
 import { motion }              from "framer-motion"
 import API                     from "../utils/api"
 import toast                   from "react-hot-toast"
 import RobotAnimation          from "../components/RobotAnimation"
+import { useAuth }             from "../context/AuthContext"
+
+const RESEND_SECONDS = 45
+
+const maskEmail = (email) => {
+  if (!email) return ""
+  const idx = email.indexOf("@")
+  if (idx <= 0) return email
+  return email.slice(0, Math.min(idx, 7)) + "******" + email.slice(idx)
+}
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams()
   const navigate       = useNavigate()
   const email          = searchParams.get("email") || ""
+  const { verify }     = useAuth()
 
   const [code,    setCode]    = useState("")
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
   const [error,   setError]   = useState("")
+  const [countdown, setCountdown] = useState(RESEND_SECONDS)
+
+  useEffect(() => {
+    if (countdown <= 0) return
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [countdown])
 
   const onSubmit = async (e) => {
     e.preventDefault()
@@ -25,9 +43,9 @@ export default function VerifyEmail() {
     setLoading(true)
     setError("")
     try {
-      const { data } = await API.post("/api/auth/verify-otp", { email, code })
+      const { data } = await verify(email, code)
       toast.success(data.message || "Email verified successfully!")
-      navigate("/login")
+      navigate("/dashboard", { replace: true })
     } catch (err) {
       setError(err.response?.data?.error || "Verification failed. Please try again.")
     } finally {
@@ -43,6 +61,7 @@ export default function VerifyEmail() {
       const { data } = await API.post("/api/auth/resend-verification", { email })
       toast.success(data.message || "A new code has been sent!")
       setCode("")
+      setCountdown(RESEND_SECONDS)
     } catch (err) {
       setError(err.response?.data?.error || "Failed to resend code. Please try again.")
     } finally {
@@ -96,7 +115,9 @@ export default function VerifyEmail() {
           </h1>
           <p style={{ color: "var(--t2)", fontSize: ".88rem", lineHeight: 1.6 }}>
             We sent a 6-digit code to<br/>
-            <strong>{email}</strong>
+            <span style={{ fontSize: ".82rem", fontWeight: 600, color: "var(--t2)", opacity: .85 }}>
+              {maskEmail(email)}
+            </span>
           </p>
         </div>
 
@@ -151,11 +172,15 @@ export default function VerifyEmail() {
           <button
             type="button"
             className="btn btns"
-            disabled={resending}
+            disabled={resending || countdown > 0}
             style={{ padding: "10px 20px", fontSize: ".85rem" }}
             onClick={onResend}
           >
-            {resending ? "Resending..." : "Resend Verification Code"}
+            {resending
+              ? "Resending..."
+              : countdown > 0
+                ? `Resend Code (0:${String(countdown).padStart(2, "0")})`
+                : "Resend Verification Code"}
           </button>
         </div>
 
@@ -164,8 +189,8 @@ export default function VerifyEmail() {
         </p>
 
         <p style={{ textAlign: "center", marginTop: "14px", fontSize: ".88rem" }}>
-          <Link to="/login" style={{ color: "var(--pl)", fontWeight: 600, textDecoration: "none" }}>
-            ← Back to Sign In
+          <Link to="/signup" style={{ color: "var(--pl)", fontWeight: 600, textDecoration: "none" }}>
+            ← Back to Sign Up
           </Link>
         </p>
       </motion.div>

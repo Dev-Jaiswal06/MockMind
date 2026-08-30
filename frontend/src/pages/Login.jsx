@@ -123,6 +123,13 @@ export default function Login() {
                   </button>
                 )}
               </div>
+              {f.key === "password" && passwordTouched && (
+                <div className={`validation-message ${isPasswordValid ? "success" : "error"}`}>
+                  {isPasswordValid
+                    ? "Password strength: Valid"
+                    : "Password must be at least 8 characters."}
+                </div>
+              )}
           </div>
             ))}
 
@@ -137,7 +144,7 @@ export default function Login() {
           <motion.button
             type="submit"
             className="btn btnp"
-            disabled={loading || !isPasswordValid}
+            disabled={loading}
             style={{ marginTop: "6px", padding: "14px", fontSize: "1rem" }}
             whileHover={!loading ? { scale: 1.02 } : {}}
           >

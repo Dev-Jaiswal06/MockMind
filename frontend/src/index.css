@@ -4,23 +4,24 @@
   --bg:    #f8fafc;
   --bg2:   #f1f5f9;
   --bg3:   #e2e8f0;
-  --card:  rgba(255,255,255,0.85);
-  --card2: rgba(255,255,255,0.6);
-  --bdr:   rgba(0,0,0,0.08);
-  --bdr2:  rgba(0,0,0,0.12);
+  --card:  #ffffff;
+  --card2: #ffffff;
+  --bdr:   #e2e8f0;
+  --bdr2:  #cbd5e1;
+  --acc:   #eff6ff;
   --p:     #1d4ed8;
   --pl:    #2563eb;
   --s:     #f59e0b;
   --ok:    #16a34a;
-  --err:   #ef4444;
+  --err:   #dc2626;
   --warn:  #f59e0b;
-  --t1:    #0f172a;
-  --t2:    #475569;
+  --t1:    #172033;
+  --t2:    #64748b;
   --t3:    #94a3b8;
   --grad:  linear-gradient(135deg,#1d4ed8,#2563eb);
   --grad2: linear-gradient(135deg,#1d4ed8 0%,#2563eb 50%,#d97706 100%);
-  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.04);
-  --shadow-lg: 0 4px 6px rgba(0,0,0,.05), 0 10px 40px rgba(0,0,0,.08);
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
+  --shadow-lg: 0 6px 16px rgba(0,0,0,.05), 0 10px 30px rgba(0,0,0,.06);
   --shadow-glow: 0 0 30px rgba(37,99,235,.15);
 }
 
@@ -28,16 +29,18 @@ html.dark {
   --bg:    #080812;
   --bg2:   #0e0e1c;
   --bg3:   #16162a;
-  --card:  rgba(255,255,255,0.07);
-  --card2: rgba(255,255,255,0.04);
-  --bdr:   rgba(255,255,255,0.10);
-  --bdr2:  rgba(255,255,255,0.15);
+  --card:  rgba(255,255,255,0.10);
+  --card2: rgba(255,255,255,0.06);
+  --bdr:   rgba(255,255,255,0.13);
+  --bdr2:  rgba(255,255,255,0.18);
+  --acc:   rgba(59,130,246,.18);
   --p:     #60a5fa;
   --pl:    #93c5fd;
   --s:     #fbbf24;
   --t1:    #f1f5f9;
   --t2:    #94a3b8;
-  --t3:    #475569;
+  --t3:    #64748b;
+  --err:   #f87171;
   --grad:  linear-gradient(135deg,#3b82f6,#2563eb);
   --grad2: linear-gradient(135deg,#93c5fd 0%,#3b82f6 50%,#fbbf24 100%);
   --shadow: 0 2px 8px rgba(0,0,0,.4), 0 8px 32px rgba(0,0,0,.3);
@@ -106,7 +109,7 @@ body{
   background-clip:text;
 }
 
-.btn{border:none;border-radius:10px;font-weight:600;
+.btn{border:none;border-radius:8px;font-weight:600;
   cursor:pointer;transition:all .25s ease;font-family:'Inter',sans-serif;}
 .btn:focus-visible{
   outline:2px solid var(--p);
@@ -125,6 +128,14 @@ body{
 }
 .btnp:active{transform:translateY(0);box-shadow:0 2px 8px rgba(29,78,216,.25)}
 .btnp:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+html.dark .btnp{
+  box-shadow:0 2px 10px rgba(96,165,250,.35);
+}
+html.dark .btnp:hover{
+  box-shadow:0 6px 24px rgba(96,165,250,.45);
+}
+html.dark .btnp:active{box-shadow:0 2px 10px rgba(96,165,250,.35)}
+html.dark .btnp:disabled{box-shadow:none}
 .btns{
   background:var(--card);
   color:var(--t2);
@@ -138,6 +149,23 @@ body{
   transform:translateY(-1px);
 }
 .btns:active{transform:translateY(0)}
+
+.logout-btn{
+  background:var(--card);
+  border:1px solid var(--bdr);
+  color:var(--t2);
+  transition:all .2s;
+}
+.logout-btn:hover{
+  border-color:rgba(220,38,38,.4);
+  background:rgba(220,38,38,.06);
+  color:#dc2626;
+}
+html.dark .logout-btn:hover{
+  border-color:rgba(248,113,113,.4);
+  background:rgba(248,113,113,.08);
+  color:#f87171;
+}
 
 .inp{
   width:100%;
@@ -158,6 +186,10 @@ body{
 .inp:focus-visible{
   outline:2px solid var(--p);
   outline-offset:1px;
+}
+html.dark .inp:focus{
+  border-color:var(--p);
+  box-shadow:0 0 0 3px rgba(96,165,250,.25);
 }
 .inp.valid-input{border-color:var(--ok);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
 .inp.invalid-input{border-color:var(--err);box-shadow:0 0 0 3px rgba(239,68,68,.12)}
@@ -264,6 +296,11 @@ html.dark .orb-3{width:400px;height:400px;background:radial-gradient(circle,rgba
 .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
 .grid-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
 
+/* ── Landing page padding (responsive) ── */
+.nav-pad  { padding: 14px 48px; }
+.hero-pad { padding: 56px 48px; }
+.sec-pad  { padding: 60px 48px; }
+
 .mm{display:none!important}
 
 @media(max-width:768px){
@@ -271,6 +308,9 @@ html.dark .orb-3{width:400px;height:400px;background:radial-gradient(circle,rgba
   .mm{display:block!important}
   .grid-3,.grid-2{grid-template-columns:1fr!important}
   .grid-auto{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))!important}
+  .nav-pad  { padding: 12px 24px!important }
+  .hero-pad { padding: 40px 24px!important }
+  .sec-pad  { padding: 48px 24px!important }
 }
 @media(max-width:480px){
   .grid-auto{grid-template-columns:1fr!important}

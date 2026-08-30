@@ -91,6 +91,7 @@ export default function Coding() {
   const [historyIdx,     setHistoryIdx]     = useState(-1)
   const [showSolution,   setShowSolution]   = useState(false)
   const [solutionLang,   setSolutionLang]   = useState("java")
+  const [expanded,       setExpanded]       = useState(null)
   const [searchParams,     setSearchParams]   = useSearchParams()
 
   // ── Resolve code for a problem + language (saved > starter > empty) ──
@@ -157,6 +158,7 @@ export default function Coding() {
       setHistoryIdx(0)
       setResults(null)
       setRunResults(null)
+      setExpanded(null)
       toast.success("Loaded coding problems")
     } catch {
       toast.error("Failed to load problems. Please try again.")
@@ -185,6 +187,7 @@ export default function Coding() {
     setCurrentIndex(problems.indexOf(p))
     setRunResults(null)
     setResults(null)
+    setExpanded(null)
   }
 
   const handleNextProblem = () => {
@@ -200,6 +203,7 @@ export default function Coding() {
     setCode(resolveCode(next, language))
     setRunResults(null)
     setResults(null)
+    setExpanded(null)
   }
 
   // ── Run code against example test cases ──
@@ -212,6 +216,7 @@ export default function Coding() {
     setRunning(true)
     setRunResults(null)
     setResults(null)
+    setExpanded(null)
     try {
       const res = await API.post("/api/coding/run-cases", {
         code,
@@ -245,6 +250,7 @@ export default function Coding() {
     setSubmitting(true)
     setResults(null)
     setRunResults(null)
+    setExpanded(null)
     try {
       const res = await API.post("/api/coding/submit", {
         code,
@@ -271,6 +277,9 @@ export default function Coding() {
       setSubmitting(false)
     }
   }
+
+  const consoleKind   = runResults ? "Example" : results ? "Test Case" : null
+  const consoleData   = runResults || results
 
   // ── Loading screen ──
   if (loading) return (
@@ -301,34 +310,38 @@ export default function Coding() {
         gap:            "10px",
         background:     "var(--bg2)"
       }}>
-        {/* Left — Title */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {/* Left — Title + difficulty */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
           <span style={{ fontSize: "1.4rem" }}>💻</span>
           <div>
-            <div style={{ fontWeight: 700, fontSize: ".95rem" }}>
+            <div style={{ fontWeight: 700, fontSize: "1rem" }}>
               {problem?.title || "Coding Assessment"}
             </div>
-            <div style={{ fontSize: ".75rem", color: "var(--t2)" }}>
+            <div style={{ fontSize: ".75rem", color: "var(--t2)", marginTop: "2px" }}>
               MockMind — AI Coding Challenge
-              {problems.length > 0 && (
-                <span style={{ marginLeft: "10px", opacity: 0.8 }}>
-                  ({currentIndex + 1}/{problems.length})
-                </span>
-              )}
             </div>
           </div>
-          {/* Difficulty badge */}
           {problem && (
             <span style={{
               background:   `${DIFFICULTIES.find(d => d.id === problem.difficulty)?.color}22`,
               border:       `1px solid ${DIFFICULTIES.find(d => d.id === problem.difficulty)?.color}`,
               color:        DIFFICULTIES.find(d => d.id === problem.difficulty)?.color,
               borderRadius: "20px",
-              padding:      "3px 10px",
-              fontSize:     ".75rem",
-              fontWeight:   700
+              padding:      "4px 12px",
+              fontSize:     ".78rem",
+              fontWeight:   700,
+              whiteSpace:   "nowrap"
             }}>
-              {problem.difficulty?.toUpperCase()}
+              {(problem.difficulty?.charAt(0).toUpperCase() + problem.difficulty?.slice(1)) || "Easy"} · {currentIndex + 1} / {problems.length}
+            </span>
+          )}
+          {solvedMap[problem?.title] && (
+            <span style={{
+              fontSize: ".75rem", color: "#16a34a",
+              background: "rgba(22,163,74,.12)", border: "1px solid rgba(22,163,74,.3)",
+              borderRadius: "12px", padding: "3px 10px", fontWeight: 700
+            }}>
+              ✅ Solved
             </span>
           )}
         </div>
@@ -355,22 +368,67 @@ export default function Coding() {
           </select>
 
           {/* Language selector */}
-          <select
-            value={language}
-            onChange={e => handleLanguageChange(e.target.value)}
-            className="inp"
+          <div style={{
+            display:       "flex",
+            alignItems:    "center",
+            gap:           "6px",
+            background:    "var(--card2)",
+            border:        "1px solid var(--bdr2)",
+            borderRadius:  "8px",
+            padding:       "0 8px 0 10px"
+          }}>
+            <span style={{ fontSize: ".78rem", color: "var(--t2)", fontWeight: 600 }}>
+              Language:
+            </span>
+            <select
+              value={language}
+              onChange={e => handleLanguageChange(e.target.value)}
+              style={{
+                width: "auto", border: "none", outline: "none",
+                background: "transparent", color: "var(--t1)",
+                padding: "6px 2px", fontSize: ".82rem", fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              {LANGUAGES.map(lang => (
+                <option key={lang.id} value={lang.id}>{lang.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Run */}
+          <button
+            onClick={handleRun}
+            disabled={running || submitting}
+            className="btn"
             style={{
-              width:     "auto",
-              padding:   "6px 10px",
-              fontSize:  ".82rem",
-              cursor:    "pointer",
-              borderRadius: "8px"
+              background: "rgba(22,163,74,.15)",
+              border:     "1px solid rgba(22,163,74,.4)",
+              color:      "#16a34a",
+              padding:    "7px 16px",
+              fontSize:   ".82rem",
+              fontWeight: 700,
+              opacity:    (running || submitting) ? 0.5 : 1,
+              cursor:     (running || submitting) ? "not-allowed" : "pointer"
             }}
           >
-            {LANGUAGES.map(lang => (
-              <option key={lang.id} value={lang.id}>{lang.label}</option>
-            ))}
-          </select>
+            {running ? "⏳ Running..." : "▶️ Run"}
+          </button>
+
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || running}
+            className="btn btnp"
+            style={{
+              padding:  "7px 16px",
+              fontSize: ".82rem",
+              opacity:  (submitting || running) ? 0.5 : 1,
+              cursor:   (submitting || running) ? "not-allowed" : "pointer"
+            }}
+          >
+            {submitting ? "⏳ Submitting..." : "🚀 Submit"}
+          </button>
 
           {historyIdx > 0 && (
             <button
@@ -396,6 +454,7 @@ export default function Coding() {
             onClick={fetchProblems}
             className="btn btns"
             style={{ padding: "7px 14px", fontSize: ".82rem" }}
+            title="Get a fresh batch of problems"
           >
             🔄 Refresh Batch
           </button>
@@ -877,60 +936,10 @@ export default function Coding() {
         </div>
 
         {/* ── RIGHT PANEL — Code Editor ── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-
-          {/* Actions bar */}
-          <div style={{
-            display:        "flex",
-            flexWrap:       "wrap",
-            gap:            "8px",
-            padding:        "10px 16px",
-            borderBottom:   "1px solid var(--bdr)",
-            background:     "var(--bg2)",
-            alignItems:     "center",
-            justifyContent: "space-between"
-          }}>
-            <div style={{ color: "var(--t2)", fontSize: ".9rem", fontWeight: 600 }}>
-              Language: {LANGUAGES.find(lang => lang.id === language)?.label}
-            </div>
-
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button
-                onClick={handleRun}
-                disabled={running || submitting}
-                className="btn"
-                style={{
-                  background:   "rgba(22,163,74,.15)",
-                  border:       "1px solid rgba(22,163,74,.4)",
-                  color:        "#16a34a",
-                  padding:      "7px 16px",
-                  fontSize:     ".82rem",
-                  fontWeight:   700,
-                  opacity:      (running || submitting) ? 0.5 : 1,
-                  cursor:       (running || submitting) ? "not-allowed" : "pointer"
-                }}
-              >
-                {running ? "⏳ Running..." : "▶️ Run"}
-              </button>
-
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || running}
-                className="btn btnp"
-                style={{
-                  padding:  "7px 16px",
-                  fontSize: ".82rem",
-                  opacity:  (submitting || running) ? 0.5 : 1,
-                  cursor:   (submitting || running) ? "not-allowed" : "pointer"
-                }}
-              >
-                {submitting ? "⏳ Submitting..." : "🚀 Submit"}
-              </button>
-            </div>
-          </div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
 
           {/* Monaco Editor */}
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minHeight: 0 }}>
             <Editor
               height="100%"
               language={language === "cpp" ? "cpp" : language}
@@ -952,6 +961,159 @@ export default function Coding() {
               }}
             />
           </div>
+
+          {/* ── Test Results Console ── */}
+          {(running || submitting || runResults || results) && (
+            <div style={{
+              borderTop:      "1px solid var(--bdr)",
+              background:     "var(--bg2)",
+              display:        "flex",
+              flexDirection:  "column",
+              maxHeight:      "260px",
+              flexShrink:     0
+            }}>
+              {/* Console header */}
+              <div style={{
+                display:        "flex",
+                alignItems:     "center",
+                justifyContent: "space-between",
+                padding:        "8px 14px",
+                borderBottom:   "1px solid var(--bdr)",
+                flexWrap:       "wrap",
+                gap:            "6px"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 700, fontSize: ".84rem", color: "var(--t1)" }}>🖥 Test Results</span>
+                  {consoleData && (
+                    <span style={{
+                      background: consoleData.all_passed ? "rgba(22,163,74,.12)" : "rgba(239,68,68,.12)",
+                      border: `1px solid ${consoleData.all_passed ? "#16a34a" : "#ef4444"}`,
+                      color: consoleData.all_passed ? "#16a34a" : "#ef4444",
+                      padding: "2px 10px", borderRadius: "20px",
+                      fontSize: ".72rem", fontWeight: 700
+                    }}>
+                      {consoleData.passed}/{consoleData.total} {consoleKind === "Test Case" ? "tests" : "examples"} passed
+                    </span>
+                  )}
+                  {consoleData?.overall_status && !consoleData.all_passed && (
+                    <span style={{
+                      background: "rgba(245,158,11,.12)", border: "1px solid #f59e0b",
+                      color: "#f59e0b", padding: "2px 10px", borderRadius: "20px",
+                      fontSize: ".72rem", fontWeight: 700
+                    }}>
+                      {consoleData.overall_status}
+                    </span>
+                  )}
+                </div>
+                {consoleData && (
+                  <span style={{ color: "var(--t3)", fontSize: ".72rem" }}>
+                    {consoleKind === "Test Case" ? "Submit results · click a test for details" : "Run results · click a case for details"}
+                  </span>
+                )}
+              </div>
+
+              {/* Console body */}
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 14px" }}>
+                {(running || submitting) ? (
+                  <div style={{
+                    display:       "flex",
+                    alignItems:    "center",
+                    gap:           "10px",
+                    color:         "var(--t2)",
+                    fontSize:      ".82rem",
+                    fontWeight:    600
+                  }}>
+                    <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }}/>
+                    {running ? "Running example cases..." : "Submitting & running hidden test cases..."}
+                  </div>
+                ) : consoleData ? (
+                  (consoleData.results || []).map((tc, i) => {
+                    const marker = consoleKind === "Test Case" ? `TC ${tc.test_case}` : `Example ${tc.test_case}`
+                    return (
+                      <div key={i} style={{ marginBottom: "6px" }}>
+                        <button
+                          onClick={() => setExpanded(expanded === i ? null : i)}
+                          style={{
+                            width:      "100%", textAlign: "left",
+                            background: "var(--card2)",
+                            border:     `1px solid ${tc.passed ? "rgba(22,163,74,.35)" : "rgba(239,68,68,.35)"}`,
+                            borderRadius: "8px", padding: "6px 10px",
+                            display:       "flex",
+                            alignItems:    "center",
+                            gap:           "8px",
+                            cursor:        "pointer",
+                            fontSize:      ".8rem",
+                            color:         "var(--t1)",
+                            fontWeight:    600
+                          }}
+                        >
+                          <span style={{ color: tc.passed ? "#16a34a" : "#ef4444", fontWeight: 800, flexShrink: 0, fontSize: ".86rem" }}>
+                            {tc.passed ? "✓" : "✗"}
+                          </span>
+                          <span style={{ flex: 1 }}>{marker}</span>
+                          <span style={{ fontSize: ".7rem", color: tc.passed ? "#16a34a" : "#f59e0b", fontWeight: 700, flexShrink: 0 }}>
+                            {tc.passed ? "PASSED" : tc.status}
+                          </span>
+                          <span style={{ fontSize: ".68rem", color: "var(--t3)", flexShrink: 0, whiteSpace: "nowrap" }}>
+                            {tc.runtime_ms ? `⏱ ${tc.runtime_ms} ms` : ""}{tc.memory_kb ? ` · ${(tc.memory_kb / 1024).toFixed(1)} MB` : ""}
+                          </span>
+                        </button>
+
+                        {expanded === i && (
+                          <div style={{
+                            background: "rgba(0,0,0,.2)",
+                            borderRadius: "8px", padding: "10px 12px",
+                            marginTop: "4px", fontSize: ".8rem"
+                          }}>
+                            {tc.input && (
+                              <div style={{ marginBottom: "6px" }}>
+                                <div style={{ fontSize: ".7rem", color: "var(--t2)", fontWeight: 600, marginBottom: "2px" }}>Input:</div>
+                                <code style={{ display: "block", background: "rgba(0,0,0,.2)", padding: "6px 8px", borderRadius: "5px", fontSize: ".76rem", color: "var(--t1)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{tc.input || "(empty)"}</code>
+                              </div>
+                            )}
+                            <div style={{ marginBottom: "6px" }}>
+                              <div style={{ fontSize: ".7rem", color: "var(--t2)", fontWeight: 600, marginBottom: "2px" }}>Expected:</div>
+                              <code style={{ display: "block", background: "rgba(0,0,0,.2)", padding: "6px 8px", borderRadius: "5px", fontSize: ".76rem", color: "#16a34a", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{tc.expected || "(empty)"}</code>
+                            </div>
+                            <div style={{ marginBottom: tc.error_message ? "6px" : 0 }}>
+                              <div style={{ fontSize: ".7rem", color: "var(--t2)", fontWeight: 600, marginBottom: "2px" }}>Your Output:</div>
+                              <code style={{ display: "block", background: "rgba(0,0,0,.2)", padding: "6px 8px", borderRadius: "5px", fontSize: ".76rem", color: tc.passed ? "#16a34a" : "#ef4444", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{tc.got || "(no output)"}</code>
+                            </div>
+                            {tc.error_message && (
+                              <div>
+                                <div style={{ fontSize: ".7rem", color: "#ef4444", fontWeight: 600, marginBottom: "2px" }}>Error:</div>
+                                <pre style={{
+                                  background: "rgba(239,68,68,.06)", border: "1px solid rgba(239,68,68,.25)",
+                                  borderRadius: "5px", padding: "6px 8px", fontSize: ".72rem",
+                                  color: "#ef4444", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                                  maxHeight: "110px", overflow: "auto", margin: 0
+                                }}>{tc.error_message}</pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                ) : null}
+              </div>
+
+              {/* Footer — Runtime / Memory */}
+              {consoleData && (
+                <div style={{
+                  padding: "8px 14px", borderTop: "1px solid var(--bdr)",
+                  display: "flex", gap: "18px", fontSize: ".78rem", color: "var(--t2)", flexWrap: "wrap"
+                }}>
+                  <span style={{ fontWeight: 600, color: "var(--t1)" }}>
+                    ⚡ Runtime: <span style={{ color: consoleData.runtime_avg_ms ? "#16a34a" : "var(--t3)", fontWeight: 700 }}>{consoleData.runtime_avg_ms ? `${consoleData.runtime_avg_ms} ms` : "—"}</span>
+                  </span>
+                  <span style={{ fontWeight: 600, color: "var(--t1)" }}>
+                    💾 Memory: <span style={{ color: consoleData.memory_avg_mb ? "#16a34a" : "var(--t3)", fontWeight: 700 }}>{consoleData.memory_avg_mb ? `${consoleData.memory_avg_mb} MB` : "—"}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

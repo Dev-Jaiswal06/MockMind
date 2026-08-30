@@ -7,6 +7,9 @@ import {
   LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts"
+import {
+  LuBot, LuChartColumn, LuChartLine, LuCode, LuTarget, LuTrophy
+} from "react-icons/lu"
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
@@ -22,9 +25,16 @@ export default function Dashboard() {
       .catch(()  => setLoad(false))
   }, [])
 
+  const fmtDate = (iso, i) => {
+    if (!iso) return `S${i + 1}`
+    const d = new Date(iso)
+    if (isNaN(d)) return `S${i + 1}`
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+  }
+
   const st        = data?.stats || {}
   const chartData = (data?.chart_data || []).map((d, i) => ({
-    session: `S${i + 1}`,
+    session: fmtDate(d.created_at, i),
     score:   Math.round(d.percentage),
     role:    d.role
   }))
@@ -34,6 +44,12 @@ export default function Dashboard() {
     score:   d.test_total ? Math.round((d.test_passed / d.test_total) * 100) : 0,
     problem: d.problem_title
   }))
+
+  const minCoding = codingChartData.length
+    ? Math.max(0, Math.floor((Math.min(...codingChartData.map(c => c.score)) - 10) / 10) * 10)
+    : 0
+
+  const scoreColor = v => v >= 70 ? "var(--ok)" : v >= 40 ? "var(--s)" : "var(--err)"
 
   if (load) return (
     <div style={{ padding:"28px", maxWidth:"1400px", margin:"0 auto" }}>
@@ -48,41 +64,33 @@ export default function Dashboard() {
   )
 
   const statCards = [
-    { icon:"🎯", label:"Total Interviews",    value: st.total_interviews   || 0,        color:"#2563eb" },
-    { icon:"📊", label:"Average Score",       value: `${Math.round(st.avg_interview_score || 0)}%`, color:"#f59e0b" },
-    { icon:"💻", label:"Coding Attempts",     value: st.total_coding       || 0,        color:"#2563eb" },
-    { icon:"🏆", label:"Best Performing Role",value: st.best_role          || "N/A",    color:"#f59e0b" },
+    { icon:<LuTarget size={18}/>,      label:"Total Interviews",     value: st.total_interviews   || 0,        color:"var(--pl)", long:false },
+    { icon:<LuChartColumn size={18}/>, label:"Average Score",        value: `${Math.round(st.avg_interview_score || 0)}%`, color: scoreColor(st.avg_interview_score), long:false },
+    { icon:<LuCode size={18}/>,        label:"Coding Attempts",      value: st.total_coding       || 0,        color:"var(--pl)", long:false },
+    { icon:<LuTrophy size={18}/>,      label:"Best Performing Role", value: st.best_role          || "N/A",    color:"var(--pl)", long:true, gold:true  },
   ]
 
   const modules = [
     {
-      icon:  "🤖",
+      icon:  <LuBot size={28}/>,
+      gold:  true,
       title: "AI Mock Interview",
       desc:  "Practice with 100% AI-generated questions. Choose role-based or resume-based interview mode.",
       link:  "/interview",
-      bg:    "rgba(37,99,235,.12)",
-      bdr:   "rgba(37,99,235,.3)",
-      btn:   "var(--grad)",
       label: "Start Interview"
     },
     {
-      icon:  "💻",
+      icon:  <LuCode size={28}/>,
       title: "Coding Assessment",
-      desc:  "Solve AI-generated coding problems in 5 languages with real-time code execution.",
+      desc:  "Solve AI-generated coding problems in 4 languages with real-time code execution.",
       link:  "/coding",
-      bg:    "rgba(245,158,11,.12)",
-      bdr:   "rgba(245,158,11,.3)",
-      btn:   "linear-gradient(135deg,#2563eb,#1d4ed8)",
       label: "Start Coding"
     },
     {
-      icon:  "📊",
+      icon:  <LuChartColumn size={28}/>,
       title: "Performance Analytics",
       desc:  "View detailed reports — strengths, weaknesses, and personalized recommendations.",
       link:  "/reports",
-      bg:    "rgba(245,158,11,.12)",
-      bdr:   "rgba(245,158,11,.3)",
-      btn:   "linear-gradient(135deg,#f59e0b,#d97706)",
       label: "View Reports"
     },
   ]
@@ -96,7 +104,7 @@ export default function Dashboard() {
           display:        "flex",
           justifyContent: "space-between",
           alignItems:     "center",
-          marginBottom:   "28px",
+          marginBottom:   "32px",
           flexWrap:       "wrap",
           gap:            "14px"
         }}
@@ -104,8 +112,8 @@ export default function Dashboard() {
         animate={{ opacity:1, y:0 }}
       >
         <div>
-          <h1 style={{ fontSize:"2.1rem", fontWeight:800 }}>
-            Welcome, <span className="gt">{user?.name}!</span>
+          <h1 style={{ fontSize:"1.8rem", fontWeight:800 }}>
+            Welcome, <span style={{ color:"var(--p)" }}>{user?.name}</span>!
           </h1>
           <p style={{ color:"var(--t2)", marginTop:"4px", fontSize:".95rem" }}>
             Ready for your next practice session?
@@ -118,27 +126,44 @@ export default function Dashboard() {
         display:               "grid",
         gridTemplateColumns:   "repeat(auto-fill, minmax(200px, 1fr))",
         gap:                   "16px",
-        marginBottom:          "28px"
+        marginBottom:          "32px"
       }}>
         {statCards.map((c, i) => (
           <motion.div
             key={i}
             className="glass"
-            style={{ padding: "26px" }}
+            style={{
+              display:       "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              minHeight:     "150px",
+              padding:       "18px",
+              position:      "relative"
+            }}
             initial={{ opacity:0, y:20 }}
             animate={{ opacity:1, y:0 }}
             transition={{ delay: i * .1 }}
             whileHover={{ y:-3 }}
           >
             <div style={{
-              width:"52px",height:"52px",borderRadius:"14px",
-              background:`${c.color}18`,
-              border:`1px solid ${c.color}33`,
+              position: "absolute", top: "14px", right: "14px",
+              width: "6px", height: "6px", borderRadius: "50%",
+              background: "rgba(245,158,11,.6)"
+            }}/>
+            <div style={{
+              width:"40px",height:"40px",borderRadius:"11px",
+              background: c.gold ? "rgba(245,158,11,.12)" : "var(--acc)",
+              border: c.gold ? "1px solid rgba(245,158,11,.3)" : "1px solid rgba(37,99,235,.2)",
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:"1.5rem",marginBottom:"12px"
+              color: c.gold ? "var(--s)" : "var(--p)", marginBottom:"12px"
             }}>{c.icon}</div>
-            <div style={{ fontSize:"2rem", fontWeight:800, color:c.color }}>{c.value}</div>
-            <div style={{ fontSize:".9rem", color:"var(--t2)", marginTop:"4px" }}>{c.label}</div>
+            <div style={{
+              fontSize: c.long ? "1.4rem" : "1.6rem",
+              fontWeight: 800,
+              color: c.color,
+              lineHeight: 1.3
+            }}>{c.value}</div>
+            <div style={{ fontSize:".85rem", color:"var(--t2)", marginTop:"5px" }}>{c.label}</div>
           </motion.div>
         ))}
       </div>
@@ -149,7 +174,7 @@ export default function Dashboard() {
         gridTemplateColumns:   "repeat(auto-fit, minmax(280px, 1fr))",
         gap:                   "20px",
         alignItems:            "stretch",
-        marginBottom:          "28px"
+        marginBottom:          "36px"
       }}>
         {modules.map((m, i) => (
           <motion.div
@@ -161,22 +186,48 @@ export default function Dashboard() {
               justifyContent: "space-between",
               minHeight:     "300px",
               padding:       "32px",
-              background:    m.bg,
-              border:        `1px solid ${m.bdr}`
+              position:      "relative",
+              overflow:      "hidden"
             }}
             initial={{ opacity:0, y:20 }}
             animate={{ opacity:1, y:0 }}
             transition={{ delay: .1 + i * .1 }}
             whileHover={{ y:-5 }}
           >
-            <div style={{ fontSize:"3.2rem", marginBottom:"14px" }}>{m.icon}</div>
-            <h2 style={{ fontSize:"1.5rem", fontWeight:700, marginBottom:"10px" }}>{m.title}</h2>
-            <p style={{ color:"var(--t2)", fontSize:".95rem", marginBottom:"20px", lineHeight:1.6 }}>
-              {m.desc}
-            </p>
+            {m.gold && (
+              <div style={{
+                position: "absolute", top: 0, left: 0,
+                height: "4px", width: "50%",
+                background: "linear-gradient(90deg,#2563eb 40%,#f59e0b)",
+                borderRadius: "16px 0 0 0"
+              }}/>
+            )}
+            <div>
+              <div style={{
+                width:"56px",height:"56px",borderRadius:"14px",
+                background:"var(--acc)",
+                border:"1px solid rgba(37,99,235,.2)",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                color:"var(--p)",marginBottom:"16px",
+                position:"relative"
+              }}>
+                {m.gold && (
+                  <span style={{
+                    position:"absolute", bottom:"6px", right:"6px",
+                    width:"6px", height:"6px", borderRadius:"50%",
+                    background:"rgba(245,158,11,.8)"
+                  }}/>
+                )}
+                {m.icon}
+              </div>
+              <h2 style={{ fontSize:"1.5rem", fontWeight:700, marginBottom:"10px" }}>{m.title}</h2>
+              <p style={{ color:"var(--t2)", fontSize:".95rem", marginBottom:"20px", lineHeight:1.6 }}>
+                {m.desc}
+              </p>
+            </div>
             <Link to={m.link}>
               <button className="btn" style={{
-                background: m.btn,
+                background: "var(--grad)",
                 color:      "#fff",
                 padding:    "13px 0",
                 width:      "100%",
@@ -194,15 +245,21 @@ export default function Dashboard() {
       {chartData.length > 0 && (
         <motion.div
           className="glass"
-          style={{ padding:"24px", marginBottom:"20px" }}
+          style={{ padding:"20px", marginBottom:"24px" }}
           initial={{ opacity:0, y:20 }}
           animate={{ opacity:1, y:0 }}
           transition={{ delay:.4 }}
         >
-          <h3 style={{ fontWeight:700, marginBottom:"18px", fontSize:"1.1rem" }}>
-            📈 Interview Score History
+          <h3 style={{ fontWeight:700, marginBottom:"14px", fontSize:"1.1rem", display:"flex", alignItems:"center", gap:"8px" }}>
+            <span style={{
+              width:"28px",height:"28px",borderRadius:"8px",
+              background:"var(--acc)", border:"1px solid rgba(37,99,235,.2)",
+              display:"inline-flex",alignItems:"center",justifyContent:"center",
+              color:"var(--p)"
+            }}><LuChartLine size={14}/></span>
+            Interview Score History
           </h3>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--bdr)"/>
               <XAxis dataKey="session" stroke="var(--t3)" fontSize={11}/>
@@ -228,19 +285,25 @@ export default function Dashboard() {
       {codingChartData.length > 0 && (
         <motion.div
           className="glass"
-          style={{ padding:"24px", marginBottom:"20px" }}
+          style={{ padding:"20px", marginBottom:"24px" }}
           initial={{ opacity:0, y:20 }}
           animate={{ opacity:1, y:0 }}
           transition={{ delay:.5 }}
         >
-          <h3 style={{ fontWeight:700, marginBottom:"18px", fontSize:"1.1rem" }}>
-            💻 Coding Score History
+          <h3 style={{ fontWeight:700, marginBottom:"14px", fontSize:"1.1rem", display:"flex", alignItems:"center", gap:"8px" }}>
+            <span style={{
+              width:"28px",height:"28px",borderRadius:"8px",
+              background:"var(--acc)", border:"1px solid rgba(37,99,235,.2)",
+              display:"inline-flex",alignItems:"center",justifyContent:"center",
+              color:"var(--p)"
+            }}><LuCode size={14}/></span>
+            Coding Score History
           </h3>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={180}>
             <LineChart data={codingChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--bdr)"/>
               <XAxis dataKey="session" stroke="var(--t3)" fontSize={11}/>
-              <YAxis stroke="var(--t3)" fontSize={11} domain={[0, 100]}/>
+              <YAxis stroke="var(--t3)" fontSize={11} domain={[minCoding, 100]}/>
               <Tooltip
                 contentStyle={{
                   background:   "var(--bg2)",

@@ -20,6 +20,9 @@ export default function Reports() {
   const [activeTab, setActiveTab] = useState("overview")
   const [showCodeModal, setShowCodeModal] = useState(false)
   const [modalCode, setModalCode] = useState({ code: "", lang: "", title: "" })
+  const [reviewSession, setReviewSession] = useState(null)
+  const [reviewData,  setReviewData]     = useState(null)
+  const [reviewLoad,  setReviewLoad]     = useState(false)
   const fetched = useRef(false)
 
   const loadData = useCallback(() => {
@@ -45,6 +48,20 @@ export default function Reports() {
     fetched.current = true
     loadData()
   }, [loadData])  
+
+  const openReview = async (sid) => {
+    setReviewSession(sid)
+    setReviewData(null)
+    setReviewLoad(true)
+    try {
+      const r = await API.get(`/api/interview/session/${sid}`)
+      setReviewData(r.data)
+    } catch (err) {
+      setReviewData({ error: err.message || "Failed to load session" })
+    } finally {
+      setReviewLoad(false)
+    }
+  }  
 
   if (loading) return (
     <div style={{
@@ -129,6 +146,20 @@ export default function Reports() {
     avg:   Math.round(r.avg)
   }))
 
+  // ── Derived metrics (client-side, 0 backend calls) ──
+  const sessions  = data.all_sessions || []
+  const lineScores = lineData.map(d => d.score)
+  const lineMinY  = lineScores.length ? Math.max(0, Math.floor((Math.min(...lineScores) - 10) / 10) * 10) : 0
+  const barScores = barData.flatMap(r => [r.avg, r.best])
+  const barMinY   = barScores.length ? Math.max(0, Math.floor((Math.min(...barScores) - 10) / 10) * 10) : 0
+
+  const avgPct   = sessions.length ? Math.round(sessions.reduce((a, s) => a + s.percentage, 0) / sessions.length) : 0
+  const bestPct  = sessions.length ? Math.round(Math.max(...sessions.map(s => s.percentage))) : 0
+  const firstPct = sessions.length ? Math.round(sessions[sessions.length - 1].percentage) : 0
+  const lastPct  = sessions.length ? Math.round(sessions[0].percentage) : 0
+  const improv   = sessions.length >= 2 ? lastPct - firstPct : null
+  const recent   = sessions.slice(0, 5)
+
   const COLORS = ["#2563eb","#0ea5e9","#16a34a","#f59e0b","#ef4444","#ec4899"]
 
   const getGradeColor = (grade) => {
@@ -191,7 +222,7 @@ export default function Reports() {
           </Link>
         </div>
 
-        {/* Quick Stats */}
+        {/* Your Performance */}
         <div style={{
           display:             "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
@@ -199,34 +230,15 @@ export default function Reports() {
           marginTop:           "20px"
         }}>
           {[
+            { icon:  "🎯", label: "Total Sessions", value: sessions.length, color: "var(--pl)" },
+            { icon:  "📊", label: "Average Score",  value: `${avgPct}%`,    color: "#f59e0b" },
+            { icon:  "🏆", label: "Best Score",     value: `${bestPct}%`,   color: "var(--pl)" },
             {
-              icon:  "🎯",
-              label: "Total Sessions",
-              value: data.all_sessions?.length || 0,
-              color: "#2563eb"
-            },
-            {
-              icon:  "📊",
-              label: "Average Score",
-              value: `${Math.round(
-                (data.all_sessions || []).reduce((a, s) => a + s.percentage, 0) /
-                (data.all_sessions?.length || 1)
-              )}%`,
-              color: "#f59e0b"
-            },
-            {
-              icon:  "🏆",
-              label: "Best Score",
-              value: `${Math.round(
-                Math.max(...(data.all_sessions || [{ percentage: 0 }]).map(s => s.percentage))
-              )}%`,
-              color: "#2563eb"
-            },
-            {
-              icon:  "📉",
-              label: "Weak Areas",
-              value: data.weak_roles?.length || 0,
-              color: "#ef4444"
+              icon:  "📈",
+              label: "Improvement",
+              value: improv === null ? "—" : `${improv >= 0 ? "↑" : "↓"} ${Math.abs(improv)} pts`,
+              color: improv === null ? "var(--t2)" : improv >= 0 ? "#16a34a" : "#ef4444",
+              sub:   improv === null ? "Complete 2 sessions" : ""
             },
           ].map((s, i) => (
             <motion.div
@@ -245,9 +257,35 @@ export default function Reports() {
               <div style={{ fontSize: ".78rem", color: "var(--t2)", marginTop: "3px" }}>
                 {s.label}
               </div>
+              {s.sub && (
+                <div style={{ fontSize: ".7rem", color: "var(--t3)", marginTop: "2px" }}>{s.sub}</div>
+              )}
             </motion.div>
           ))}
         </div>
+
+        {/* Recent performance */}
+        {recent.length > 1 && (
+          <div className="glass" style={{
+            marginTop: "14px", padding: "12px 18px",
+            display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap"
+          }}>
+            <span style={{ fontSize: ".8rem", color: "var(--t2)", fontWeight: 700 }}>
+              Recent:
+            </span>
+            {recent.map((s2, i) => (
+              <span key={i} style={{
+                fontSize: ".74rem", padding: "4px 12px", borderRadius: "20px",
+                background: "var(--card2)", border: "1px solid var(--bdr)"
+              }}>
+                <span style={{ fontWeight: 700, color: getScoreColor(s2.percentage) }}>
+                  {Math.round(s2.percentage)}%
+                </span>
+                {" "}· {s2.role?.replace(" Developer", "").replace(" Engineer", "")}
+              </span>
+            ))}
+          </div>
+        )}
       </motion.div>
 
       {/* ── Tabs ── */}
@@ -302,7 +340,7 @@ export default function Reports() {
                 <LineChart data={lineData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--bdr)"/>
                   <XAxis dataKey="session" stroke="var(--t3)" fontSize={12}/>
-                  <YAxis stroke="var(--t3)" fontSize={12} domain={[0, 100]}/>
+                  <YAxis stroke="var(--t3)" fontSize={12} domain={[lineMinY, 100]}/>
                   <Tooltip
                     contentStyle={{
                       background:   "var(--bg2)",
@@ -339,7 +377,7 @@ export default function Reports() {
                 <BarChart data={barData} barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--bdr)"/>
                   <XAxis dataKey="role" stroke="var(--t3)" fontSize={11}/>
-                  <YAxis stroke="var(--t3)" fontSize={11} domain={[0, 100]}/>
+                  <YAxis stroke="var(--t3)" fontSize={11} domain={[barMinY, 100]}/>
                   <Tooltip
                     contentStyle={{
                       background:   "var(--bg2)",
@@ -376,7 +414,7 @@ export default function Reports() {
             {/* Table Header */}
             <div style={{
               display:             "grid",
-              gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr",
+              gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr auto",
               gap:                 "12px",
               padding:             "10px 14px",
               background:          "var(--bg2)",
@@ -394,6 +432,7 @@ export default function Reports() {
               <div>Grade</div>
               <div>Time</div>
               <div>Date</div>
+              <div>Action</div>
             </div>
 
             {/* Table Rows */}
@@ -402,7 +441,7 @@ export default function Reports() {
                 key={i}
                 style={{
                   display:             "grid",
-                  gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr",
+                  gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr auto",
                   gap:                 "12px",
                   padding:             "12px 14px",
                   borderRadius:        "10px",
@@ -459,6 +498,22 @@ export default function Reports() {
                     year:  "numeric"
                   })}
                 </div>
+                <button
+                  onClick={() => openReview(s.id)}
+                  style={{
+                    background: "var(--acc)",
+                    border:     "1px solid rgba(37,99,235,.25)",
+                    color:      "var(--pl)",
+                    borderRadius: "8px",
+                    padding:    "6px 12px",
+                    fontSize:   ".75rem",
+                    fontWeight: 700,
+                    cursor:     "pointer",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  📋 Review
+                </button>
               </motion.div>
             ))}
           </div>
@@ -482,7 +537,7 @@ export default function Reports() {
               </div>
               <div>
                 <span style={{ fontSize: ".78rem", color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".5px" }}>Languages</span>
-                <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "#2563eb" }}>
+                <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--pl)" }}>
                   {(() => {
                     const langs = {}
                     ;(codingData?.submissions || []).forEach(s => { langs[s.language] = (langs[s.language] || 0) + 1 })
@@ -1080,6 +1135,222 @@ export default function Reports() {
             }}>
               {modalCode.code}
             </pre>
+          </div>
+        </div>
+      )}
+
+      {/* ── Interview Session Review Modal ── */}
+      {reviewSession && (
+        <div style={{
+          position:      "fixed",
+          top: 0, left: 0, right: 0, bottom: 0,
+          background:    "rgba(0,0,0,.6)",
+          zIndex:        1000,
+          display:       "flex",
+          alignItems:    "center",
+          justifyContent:"center",
+          padding:       "20px"
+        }} onClick={() => setReviewSession(null)}>
+          <div
+            style={{
+              background:   "var(--card)",
+              border:       "1px solid var(--bdr)",
+              borderRadius: "16px",
+              width:        "760px",
+              maxWidth:     "95vw",
+              maxHeight:    "88vh",
+              display:      "flex",
+              flexDirection:"column",
+              overflow:     "hidden"
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "space-between",
+              padding:        "16px 20px",
+              borderBottom:   "1px solid var(--bdr)",
+              background:     "var(--bg2)"
+            }}>
+              <span style={{ fontWeight: 700, fontSize: "1rem" }}>
+                📋 {reviewData?.session?.role || "Interview"} — Review
+              </span>
+              <button
+                onClick={() => setReviewSession(null)}
+                style={{ background: "transparent", border: "none", color: "var(--t2)", fontSize: "1.3rem", cursor: "pointer" }}
+              >✕</button>
+            </div>
+
+            <div style={{ padding: "20px", overflowY: "auto", flex: 1 }}>
+              {reviewLoad && (
+                <div style={{ textAlign: "center", padding: "30px 0", color: "var(--t2)" }}>
+                  <div className="spinner" style={{ width: 28, height: 28, margin: "0 auto 12px" }}/>
+                  Loading session report...
+                </div>
+              )}
+
+              {!reviewLoad && reviewData?.error && (
+                <div style={{ textAlign: "center", padding: "30px 0", color: "var(--err)" }}>
+                  Failed to load this session.
+                </div>
+              )}
+
+              {!reviewLoad && reviewData?.session && (() => {
+                const s  = reviewData.session
+                const sc = Number(s.percentage || 0)
+                const gc = s.grade === "A+" || s.grade === "A" ? "#16a34a"
+                         : s.grade === "B" || s.grade === "C" ? "#f59e0b"
+                         : "#ef4444"
+                return (
+                  <>
+                    <div style={{
+                      display: "flex", flexWrap: "wrap", gap: "10px",
+                      padding: "14px", borderRadius: "10px",
+                      background: "var(--bg2)", border: "1px solid var(--bdr)",
+                      marginBottom: "16px", fontSize: ".85rem"
+                    }}>
+                      <span style={{ fontWeight: 800, color: getScoreColor(sc) }}>
+                        Score: {Math.round(sc)}%
+                      </span>
+                      <span style={{
+                        background: `${gc}22`, border: `1px solid ${gc}`,
+                        borderRadius: "6px", padding: "2px 10px",
+                        fontWeight: 700, color: gc
+                      }}>
+                        {s.grade}
+                      </span>
+                      <span style={{ color: "var(--t2)" }}>
+                        {s.interview_type || s.type || "Interview"}
+                        {s.round_type ? ` · ${s.round_type}` : ""}
+                      </span>
+                      <span style={{ color: "var(--t2)" }}>
+                        {Math.floor((s.time_taken || 0) / 60)}m {(s.time_taken || 0) % 60}s
+                      </span>
+                      <span style={{ color: "var(--t2)" }}>
+                        {s.total_questions || reviewData.qa_list?.length || 0} questions
+                      </span>
+                      <span style={{ color: "var(--t2)" }}>
+                        {s.created_at ? new Date(s.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""}
+                      </span>
+                    </div>
+
+                    {(s.skills_breakdown || []).length > 0 && (
+                      <div style={{
+                        padding: "14px 16px", borderRadius: "10px",
+                        background: "var(--bg2)", border: "1px solid var(--bdr)",
+                        marginBottom: "16px"
+                      }}>
+                        <div style={{ fontWeight: 700, marginBottom: "12px", fontSize: ".9rem" }}>
+                          🧩 Performance Breakdown
+                        </div>
+                        <div style={{
+                          display:             "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                          gap:                 "12px"
+                        }}>
+                          {(s.skills_breakdown || []).map((sk, i) => {
+                            const p = Math.round(sk.percentage || 0)
+                            const c = p >= 70 ? "#16a34a" : p >= 40 ? "#f59e0b" : "#ef4444"
+                            return (
+                              <div key={i}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", fontSize: ".8rem" }}>
+                                  <span style={{ fontWeight: 600, color: "var(--t1)" }}>{sk.skill}</span>
+                                  <span style={{ fontWeight: 800, color: c }}>{p}%</span>
+                                </div>
+                                <div style={{ height: "7px", background: "rgba(255,255,255,.06)", borderRadius: "6px", overflow: "hidden" }}>
+                                  <div style={{ height: "100%", width: `${p}%`, background: c, borderRadius: "6px" }} />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {(reviewData.qa_list || []).map((qa, i) => {
+                      const score   = Number(qa.score ?? 0)
+                      const hasSug  = !!(qa.good_points || qa.improve || qa.hint)
+                      const scoreColor = score >= 7 ? "#16a34a" : score >= 5 ? "#f59e0b" : "#ef4444"
+                      const scoreBg    = score >= 7 ? "rgba(22,163,74,.15)" : score >= 5 ? "rgba(245,158,11,.15)" : "rgba(239,68,68,.15)"
+                      return (
+                        <div key={i} style={{
+                          padding: "16px", borderRadius: "10px",
+                          background: "rgba(255,255,255,.03)",
+                          border: "1px solid var(--bdr)", marginBottom: "10px"
+                        }}>
+                          <div style={{ fontWeight: 600, color: "var(--pl)", marginBottom: "8px", fontSize: ".88rem" }}>
+                            Q{i + 1}: {qa.question}
+                          </div>
+                          <div style={{
+                            padding: "8px", borderRadius: "6px",
+                            background: "rgba(255,255,255,.03)",
+                            color: "var(--t2)", fontSize: ".84rem",
+                            marginBottom: "8px", lineHeight: 1.5
+                          }}>
+                            {qa.answer || "No answer provided"}
+                          </div>
+                          {qa.example && (
+                            <div style={{
+                              padding: "8px", borderRadius: "6px",
+                              background: "rgba(16,185,129,.05)",
+                              border: "1px solid rgba(16,185,129,.2)",
+                              color: "var(--t2)", fontSize: ".82rem",
+                              marginBottom: "8px", lineHeight: 1.5,
+                              fontFamily: "'JetBrains Mono','Fira Code',monospace",
+                              whiteSpace: "pre-wrap", wordBreak: "break-word"
+                            }}>
+                              <span style={{ fontWeight: 700, color: "#10b981" }}>Example/Code:</span> {qa.example}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: hasSug ? 10 : 0 }}>
+                            <span style={{
+                              background: scoreBg, color: scoreColor,
+                              border: `1px solid ${scoreColor}`,
+                              borderRadius: "6px", padding: "3px 10px",
+                              fontSize: ".78rem", fontWeight: 700, flexShrink: 0
+                            }}>
+                              {score}/10
+                            </span>
+                            {qa.feedback && (
+                              <span style={{ fontSize: ".8rem", color: "var(--t2)" }}>{qa.feedback}</span>
+                            )}
+                          </div>
+                          {hasSug && (
+                            <div style={{ marginTop: "6px", fontSize: ".82rem", lineHeight: 1.6 }}>
+                              {qa.good_points && qa.good_points !== "—" && (
+                                <div style={{ marginBottom: "6px" }}>
+                                  <span style={{ fontWeight: 700, color: "#16a34a" }}>+ </span>
+                                  <span style={{ color: "var(--t2)" }}>{qa.good_points}</span>
+                                </div>
+                              )}
+                              {qa.improve && (
+                                <div style={{ marginBottom: "6px" }}>
+                                  <span style={{ fontWeight: 700, color: "#f59e0b" }}>↗ </span>
+                                  <span style={{ color: "var(--t2)" }}>{qa.improve}</span>
+                                </div>
+                              )}
+                              {qa.hint && qa.hint !== qa.improve && (
+                                <div>
+                                  <span style={{ fontWeight: 700, color: "var(--pl)" }}>💡 </span>
+                                  <span style={{ color: "var(--t2)" }}>{qa.hint}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+
+                    {!(reviewData.qa_list || []).length && (
+                      <div style={{ textAlign: "center", padding: "20px 0", color: "var(--t2)", fontSize: ".9rem" }}>
+                        No answers were recorded for this session.
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
           </div>
         </div>
       )}

@@ -5,8 +5,8 @@ import RobotAnimation from "../components/RobotAnimation"
 const features = [
   {
     icon: "🤖",
-    title: "100% AI-Generated Questions",
-    desc:  "Google Gemini generates fresh, unique questions every session — no repetition!"
+    title: "AI-Generated Questions",
+    desc:  "Fresh, unique questions generated every session — no repetition!"
   },
   {
     icon: "📄",
@@ -16,12 +16,12 @@ const features = [
   {
     icon: "💻",
     title: "Live Coding Assessment",
-    desc:  "Real-time code editor with 5 programming languages and instant execution."
+    desc:  "Real-time code editor with 4 programming languages and instant execution."
   },
   {
     icon: "📊",
     title: "AI-Powered Evaluation",
-    desc:  "Hybrid TF-IDF and Gemini AI scoring system for accurate answer analysis."
+    desc:  "Hybrid TF-IDF and Gemini AI scoring for accurate answer analysis."
   },
   {
     icon: "🏆",
@@ -30,7 +30,7 @@ const features = [
   },
   {
     icon: "🎯",
-    title: "9 Job Roles Supported",
+    title: "9 Interview Roles",
     desc:  "From Frontend Development to Machine Learning — all major tech roles covered."
   },
 ]
@@ -44,8 +44,7 @@ export default function Landing() {
       <div className="orb orb-2"/>
 
       {/* ── Navbar ── */}
-      <nav style={{
-        padding:         "18px 48px",
+      <nav className="nav-pad" style={{
         display:         "flex",
         justifyContent:  "space-between",
         alignItems:      "center",
@@ -56,27 +55,26 @@ export default function Landing() {
         zIndex:          100,
         background:      "var(--card)"
       }}>
-        <div style={{ fontSize: "1.6rem", fontWeight: 900 }}>
+        <div style={{ fontSize: "1.4rem", fontWeight: 900 }}>
           <span className="gt">Mock</span>
           <span style={{ color: "var(--t1)" }}>Mind</span>
           <span style={{ marginLeft: "4px" }}>🧠</span>
         </div>
         <div style={{ display: "flex", gap: "12px" }}>
           <Link to="/login">
-            <button className="btn btns">Sign In</button>
+            <button className="btn btns" style={{ padding: "9px 18px" }}>Sign In</button>
           </Link>
           <Link to="/signup">
-            <button className="btn btnp">Get Started Free →</button>
+            <button className="btn btnp" style={{ padding: "9px 18px" }}>Get Started Free →</button>
           </Link>
         </div>
       </nav>
 
       {/* ── Hero Section ── */}
-      <section style={{
+      <section className="hero-pad" style={{
         display:         "flex",
         alignItems:      "center",
         justifyContent:  "space-between",
-        padding:         "70px 48px",
         maxWidth:        "1200px",
         margin:          "0 auto",
         gap:             "40px",
@@ -95,32 +93,31 @@ export default function Landing() {
             borderRadius: "20px",
             padding:      "6px 16px",
             fontSize:     ".82rem",
-            color:        "#2563eb",
+            color:        "var(--pl)",
             marginBottom: "22px"
           }}>
-            ✨ Powered by Google Gemini AI — 100% Free
+            ✨ AI-Powered Mock Interview Practice
           </div>
 
           <h1 style={{
-            fontSize:     "3.2rem",
+            fontSize:     "2.8rem",
             fontWeight:   900,
-            lineHeight:   1.15,
-            marginBottom: "18px"
+            lineHeight:   1.2,
+            marginBottom: "16px"
           }}>
-            <span className="gt">MockMind</span><br/>
-            AI-Powered Mock<br/>Interview System
+            AI-Powered Mock<br/>
+            <span className="gt">Interview Practice</span>
           </h1>
 
           <p style={{
-            fontSize:     "1.05rem",
+            fontSize:     "1rem",
             color:        "var(--t2)",
             lineHeight:   1.8,
             marginBottom: "28px"
           }}>
-            Prepare for technical and HR interviews with our intelligent
-            AI system. Practice with resume-based or role-based questions,
-            get instant feedback, and track your progress.
-            <strong style={{ color: "var(--pl)" }}> Completely Free!</strong>
+            Practice technical and HR interviews with AI-generated questions
+            and instant personalized feedback.
+            <strong style={{ color: "var(--pl)" }}> Practice unlimited interviews — completely free.</strong>
           </p>
 
           <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
@@ -149,9 +146,9 @@ export default function Landing() {
             flexWrap:  "wrap"
           }}>
             {[
-              ["9+",   "Job Roles"],
-              ["100%", "AI Questions"],
-              ["5",    "Languages"]
+              ["9",   "Interview Roles"],
+              ["AI",   "Generated Questions"],
+              ["4",   "Coding Languages"]
             ].map(([num, label], i) => (
               <div key={i}>
                 <div style={{ fontSize: "1.9rem", fontWeight: 800 }} className="gt">
@@ -186,8 +183,7 @@ export default function Landing() {
       </section>
 
       {/* ── Features ── */}
-      <section style={{
-        padding:   "60px 48px",
+      <section className="sec-pad" style={{
         maxWidth:  "1200px",
         margin:    "0 auto"
       }}>
@@ -200,20 +196,21 @@ export default function Landing() {
             Why Choose <span className="gt">MockMind?</span>
           </h2>
           <p style={{ color: "var(--t2)" }}>
-            Everything you need to crack your internship interview — all free!
+            Everything you need to crack your interview.
           </p>
         </motion.div>
 
-        <div style={{
-          display:               "grid",
-          gridTemplateColumns:   "repeat(auto-fill, minmax(260px, 1fr))",
-          gap:                   "20px"
-        }}>
+        <div className="grid-3" style={{ gap: "20px" }}>
           {features.map((f, i) => (
             <motion.div
               key={i}
               className="glass"
-              style={{ padding: "26px" }}
+              style={{
+                display:       "flex",
+                flexDirection: "column",
+                minHeight:     "200px",
+                padding:       "26px"
+              }}
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ delay: i * .1 }}
@@ -229,8 +226,8 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Free Stack Section ── */}
-      <section style={{ padding: "60px 48px", maxWidth: "1200px", margin: "0 auto" }}>
+      {/* ── Technology Stack Section ── */}
+      <section className="sec-pad" style={{ maxWidth: "1200px", margin: "0 auto" }}>
         <motion.div
           className="glass"
           style={{
@@ -247,14 +244,15 @@ export default function Landing() {
             marginBottom: "10px",
             textAlign:    "center"
           }}>
-            100% <span className="gt">Free Technology Stack</span>
+            Built with <span className="gt">Modern AI Technology</span>
           </h2>
           <p style={{
             color:        "var(--t2)",
             textAlign:    "center",
             marginBottom: "32px"
           }}>
-            No hidden costs — built with entirely free services
+            MockMind combines AI, real-time code execution, and cloud
+            technologies to deliver an interactive mock interview experience.
           </p>
 
           <div style={{
@@ -264,10 +262,10 @@ export default function Landing() {
             marginBottom:          "36px"
           }}>
             {[
-              ["🤖", "Google Gemini AI",  "Gemini 2.0 Flash — 1500 req/day free"],
-              ["💻", "Judge0 API",         "Code execution — 50 req / 5 sec free"],
-              ["🗄️", "MongoDB Atlas",      "Cloud database — 512MB free forever"],
-              ["🚀", "Vercel / Render",    "Hosting — Free tier available"],
+              ["🤖", "Google Gemini AI",  "AI-generated interview questions and intelligent answer evaluation"],
+              ["💻", "Judge0 API",         "Real-time execution and evaluation of coding answers"],
+              ["🗄️", "MongoDB Atlas",      "Stores user profiles, interview sessions and performance data"],
+              ["🚀", "Vercel / Render",    "Application hosting and deployment"],
             ].map(([icon, name, desc], i) => (
               <div key={i} style={{
                 padding:      "18px",
@@ -323,7 +321,7 @@ export default function Landing() {
           </div>
           <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
             <span style={{ color: "var(--t3)", fontSize: ".8rem" }}>
-              Final Year Project — {new Date().getFullYear()}
+              Final Year Project · {new Date().getFullYear()}
             </span>
             <span style={{ color: "var(--t3)", fontSize: ".8rem" }}>|</span>
             <span style={{ color: "var(--t3)", fontSize: ".8rem" }}>

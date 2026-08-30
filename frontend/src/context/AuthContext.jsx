@@ -28,6 +28,14 @@ export function AuthProvider({ children }) {
     return data
   }
 
+  const verify = async (email, code) => {
+    const { data } = await API.post("/api/auth/verify-otp", { email, code })
+    localStorage.setItem("mm_token", data.token)
+    localStorage.setItem("mm_user",  JSON.stringify(data.user))
+    setUser(data.user)
+    return data
+  }
+
   const logout = () => {
     localStorage.removeItem("mm_token")
     localStorage.removeItem("mm_user")
@@ -35,7 +43,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <Ctx.Provider value={{ user, login, signup, logout, loading }}>
+    <Ctx.Provider value={{ user, login, signup, verify, logout, loading }}>
       {children}
     </Ctx.Provider>
   )

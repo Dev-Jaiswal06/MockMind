@@ -1350,10 +1350,11 @@ def evaluate_answers_batch(qa_list, role):
 
     # Pehle empty/skipped answers ko local score karo (AI call nahi chahiye)
     evals   = []
-    ai_items = []  # (index, question, answer)
+    ai_items = []  # (index, question, answer, example)
     for i, item in enumerate(qa_list):
         question = str(item.get("question", "")).strip()
         answer   = str(item.get("answer", "")).strip()
+        example  = str(item.get("example", "")).strip()
         if not answer or answer in ["[SKIPPED]"]:
             evals.append({
                 "question":    question,
@@ -1364,13 +1365,13 @@ def evaluate_answers_batch(qa_list, role):
                 "hint":        "Study this topic thoroughly before your next attempt."
             })
         else:
-            ai_items.append((i, question, answer))
+            ai_items.append((i, question, answer, example))
             evals.append(None)
 
     if ai_items:
         parts = []
-        for n, (_, q, a) in enumerate(ai_items, 1):
-            parts.append(f"Question {n}: {q}\nAnswer {n}: {a[:800]}")
+        for n, (_, q, a, ex) in enumerate(ai_items, 1):
+            parts.append(f"Question {n}: {q}\nAnswer {n}: {a[:800]}\nExample {n}: {ex[:800] or '-'} (the example/code is OPTIONAL)")
         qa_block = "\n\n".join(parts)
 
         prompt = f"""You are a strict but fair technical interviewer evaluating an
@@ -1386,6 +1387,11 @@ Evaluate EACH question independently. For EVERY question provide:
 - improve: what was missing or incorrect
 - hint: what an ideal answer should include
 
+Evaluate the spoken answer and the optional example/code together. Do not
+penalize the candidate for not providing an example when it is optional. If an
+example/code is provided, evaluate its correctness, relevance, and whether it
+supports the explanation.
+
 {qa_block}
 
 Return ONLY a valid JSON array with one object per question, in the exact same order:
@@ -1398,9 +1404,9 @@ Return ONLY a valid JSON array with one object per question, in the exact same o
 
         if isinstance(result, list) and result:
             # Partial result bhi use karo — jo AI ne diya woh lelo, missing pe TF-IDF
-            for n, (idx, q, a) in enumerate(ai_items):
+            for n, (idx, q, a, ex) in enumerate(ai_items):
                 r         = result[n] if n < len(result) and isinstance(result[n], dict) else None
-                relevance = _tfidf(q, a)
+                relevance = _tfidf(q, a + " " + ex)
                 if r:
                     ai_score = float(r.get("score", 5))
                     final    = round(min(10, max(0, ai_score + relevance * 3)), 1)
@@ -1423,8 +1429,8 @@ Return ONLY a valid JSON array with one object per question, in the exact same o
                     }
         else:
             # AI fail hua → local TF-IDF scoring (0 extra calls)
-            for idx, q, a in ai_items:
-                relevance = _tfidf(q, a)
+            for idx, q, a, ex in ai_items:
+                relevance = _tfidf(q, a + " " + ex)
                 evals[idx] = {
                     "question":    q,
                     "score":       round(min(8, max(3.0, relevance * 10)), 1),
@@ -1749,6 +1755,38 @@ def _next_steps(percentage, round_type):
     ]
 
 
+def _skills_breakdown(percentage, round_type):
+    sets = {
+        "technical": ("Technical Knowledge", "Problem Solving", "Communication", "Confidence"),
+        "hr":        ("Communication", "Confidence", "Professionalism", "Problem Solving"),
+        "mixed":     ("Technical Knowledge", "Communication", "Problem Solving", "Confidence"),
+    }
+    skills  = sets.get(round_type, sets["technical"])
+    offsets = {"technical": (6, 2, -3, -5), "hr": (4, 3, -3, -4), "mixed": (4, 1, -2, -3)}.get(
+        round_type, {"technical": (6, 2, -3, -5)}
+    )
+    return [{
+        "skill":      s,
+        "percentage": int(max(5, min(100, round(percentage + o)))),
+    } for s, o in zip(skills, offsets)]
+
+
+def _sanitize_skills(result, percentage, round_type):
+    sb = _skills_breakdown(percentage, round_type)
+    raw = result.get("skills_breakdown")
+    if isinstance(raw, list) and raw:
+        cleaned = []
+        for item in raw[:4]:
+            if isinstance(item, dict) and item.get("skill"):
+                cleaned.append({
+                    "skill":      str(item["skill"]),
+                    "percentage": int(max(5, min(100, round(int(item.get("percentage", 0)))))),
+                })
+        if cleaned:
+            return cleaned
+    return sb
+
+
 def _smart_report(role, evaluations, total_score, percentage, round_type="technical"):
     """0 API calls — evaluations se personalized report banao (AI fail hone par fallback)."""
     scored = [e for e in evaluations if e.get("score", 0) > 0]
@@ -1786,6 +1824,7 @@ def _smart_report(role, evaluations, total_score, percentage, round_type="techni
         ],
         "readiness_score":    int(percentage),
         "readiness_level":    _readiness_level(percentage),
+        "skills_breakdown":   _skills_breakdown(percentage, round_type),
         "next_steps":         _next_steps(percentage, round_type),
         "motivational_message": "Consistent practice pays off — every attempt brings you closer!",
     }
@@ -1810,6 +1849,11 @@ Question-wise Performance Summary:
 Provide an honest, constructive, and detailed performance analysis in English.
 Make sure your advice and recommendations match the {round_type} round — for an HR
 round focus on communication, confidence and behavioral answers, not coding bootcamps.
+Include a skills_breakdown with exactly 4 skills relevant to the {round_type} round
+(HR: Communication, Confidence, Professionalism, Problem Solving; technical:
+Technical Knowledge, Problem Solving, Communication, Confidence; mixed: a balanced
+mix). Each percentage is an integer 0-100 and must stay consistent with the total
+score — never exaggerate values far from the overall percentage.
 Return ONLY valid JSON with no extra text:
 {{
   "overall_summary": "2-3 sentences summarizing the overall performance honestly",
@@ -1829,6 +1873,12 @@ Return ONLY valid JSON with no extra text:
   ],
   "readiness_score": 75,
   "readiness_level": "Internship Ready",
+  "skills_breakdown": [
+    {{"skill": "Technical Knowledge", "percentage": 82}},
+    {{"skill": "Communication", "percentage": 74}},
+    {{"skill": "Problem Solving", "percentage": 80}},
+    {{"skill": "Confidence", "percentage": 76}}
+  ],
   "next_steps": [
     "Concrete next step 1",
     "Concrete next step 2",
@@ -1844,6 +1894,7 @@ Return ONLY valid JSON with no extra text:
         result["readiness_score"] = int(percentage)
         result["readiness_level"] = _readiness_level(percentage)
         result["next_steps"]      = _next_steps(percentage, round_type)
+        result["skills_breakdown"] = _sanitize_skills(result, percentage, round_type)
         return result
 
     return _smart_report(role, evaluations, total_score, percentage, round_type)
